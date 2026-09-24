@@ -14,8 +14,8 @@
 // @grant        GM_unregisterMenuCommand
 // @homepageURL  https://github.com/snownico0722/gptopt
 // @supportURL   https://github.com/snownico0722/gptopt/issues
-// @downloadURL  https://raw.githubusercontent.com/snownico0722/gptopt/main/gptopt.user.js
-// @updateURL    https://raw.githubusercontent.com/snownico0722/gptopt/main/gptopt.user.js
+// @downloadURL  https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt.user.js
+// @updateURL    https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt.user.js
 // ==/UserScript==
 
 (function () {
