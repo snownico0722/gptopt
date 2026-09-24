@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPTOpt - ChatGPT 手机远程横置 + 会话导航
 // @namespace    https://github.com/snownico0722/gptopt
-// @version      1.4.0
+// @version      1.5.0
 // @description  手机远程控制电脑时，将 ChatGPT 放进真实竖向视口后横置 90°；内置轻量、旋转感知的会话快捷导航。
 // @author       snownico0722
 // @match        https://chatgpt.com/*
@@ -137,34 +137,11 @@
         style.textContent = `
 #gptopt-nav-rail {
     position: fixed !important;
-    top: 74px !important;
-    right: 8px !important;
-    bottom: 104px !important;
-    width: 220px !important;
     z-index: 2147483647 !important;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 8px;
     box-sizing: border-box;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    color: #202124;
-    background: rgba(250, 250, 250, .90);
-    border: 1px solid rgba(0, 0, 0, .10);
-    border-radius: 16px;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, .12);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
     pointer-events: auto !important;
     visibility: visible !important;
-}
-
-html.dark #gptopt-nav-rail {
-    color: #f1f3f4;
-    background: rgba(32, 32, 32, .90);
-    border-color: rgba(255, 255, 255, .12);
+    color: #5f6368;
 }
 
 #gptopt-nav-rail[hidden],
@@ -172,18 +149,106 @@ html.dark #gptopt-nav-rail {
     display: none !important;
 }
 
-.gptopt-nav-heading {
-    position: sticky;
-    top: -8px;
-    z-index: 2;
-    min-height: 44px;
+/* Normal / unrotated mode: keep the earlier compact rail experience. */
+#gptopt-nav-rail.is-compact {
+    top: 82px !important;
+    right: 8px !important;
+    bottom: 108px !important;
+    width: 58px !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 4px 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: none;
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+#gptopt-nav-rail.is-compact::-webkit-scrollbar {
+    display: none;
+}
+
+.gptopt-nav-menu,
+.gptopt-nav-tick {
+    appearance: none;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+}
+
+.gptopt-nav-menu {
+    flex: 0 0 48px;
+    width: 54px;
+    height: 48px;
+    border-radius: 10px;
+    font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+    opacity: .78;
+}
+
+.gptopt-nav-menu:hover,
+.gptopt-nav-menu:focus-visible {
+    background: rgba(127,127,127,.14);
+    opacity: 1;
+}
+
+.gptopt-nav-tick {
+    flex: 1 1 14px;
+    min-height: 12px;
+    max-height: 30px;
+    width: 54px;
     display: flex;
     align-items: center;
-    padding: 6px 10px;
-    margin: -8px -8px 2px;
-    background: inherit;
-    border-bottom: 1px solid rgba(127, 127, 127, .14);
-    font: 700 15px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+.gptopt-nav-tick > span {
+    width: 24px;
+    height: 4px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: .33;
+    transition: width 100ms ease, opacity 100ms ease;
+}
+
+.gptopt-nav-tick:hover > span {
+    width: 34px;
+    opacity: .7;
+}
+
+.gptopt-nav-tick.is-active > span {
+    width: 42px;
+    opacity: 1;
+}
+
+/* Rotated remote mode: persistent text, no title and no backing panel. */
+#gptopt-nav-rail.is-text {
+    top: 74px !important;
+    right: 8px !important;
+    bottom: 104px !important;
+    width: 220px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 .gptopt-nav-row {
@@ -194,27 +259,30 @@ html.dark #gptopt-nav-rail {
     grid-template-columns: 30px minmax(0, 1fr);
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
+    padding: 10px 8px;
     margin: 0;
     border: 0;
-    border-radius: 12px;
-    background: transparent;
+    border-radius: 0;
+    background: transparent !important;
     color: inherit;
     text-align: left;
     cursor: pointer;
     touch-action: manipulation;
-    font: 550 16px/1.32 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 600 16px/1.32 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
-.gptopt-nav-row:hover,
-.gptopt-nav-row:focus-visible {
-    background: rgba(127, 127, 127, .12);
+#gptopt-nav-rail.is-text .gptopt-nav-row:hover,
+#gptopt-nav-rail.is-text .gptopt-nav-row:focus-visible {
+    background: transparent !important;
+    opacity: .72;
 }
 
-.gptopt-nav-row.is-active {
-    background: rgba(16, 163, 127, .14);
-    box-shadow: inset 3px 0 0 #10a37f;
-    font-weight: 700;
+#gptopt-nav-rail.is-text .gptopt-nav-row.is-active {
+    background: transparent !important;
+    box-shadow: inset 4px 0 0 #10a37f;
+    color: var(--text-primary, currentColor);
+    font-weight: 750;
+    opacity: 1;
 }
 
 .gptopt-nav-index {
@@ -228,6 +296,9 @@ html.dark #gptopt-nav-rail {
 .gptopt-nav-label {
     min-width: 0;
     overflow: hidden;
+}
+
+#gptopt-nav-rail.is-text .gptopt-nav-label {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -235,8 +306,53 @@ html.dark #gptopt-nav-rail {
     overflow-wrap: anywhere;
 }
 
+/* Compact-mode popup. */
 #gptopt-nav-popup {
-    display: none !important;
+    position: fixed !important;
+    top: 50% !important;
+    right: 70px !important;
+    transform: translateY(-50%) !important;
+    width: min(460px, calc(100vw - 100px)) !important;
+    max-height: min(660px, calc(100vh - 80px)) !important;
+    z-index: 2147483647 !important;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px solid rgba(127,127,127,.22);
+    border-radius: 16px;
+    background: rgba(250,250,250,.96);
+    box-shadow: 0 10px 34px rgba(0,0,0,.18);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    color: #111;
+    scrollbar-width: thin;
+    pointer-events: auto !important;
+    visibility: visible !important;
+}
+
+html.dark #gptopt-nav-popup {
+    background: rgba(32,32,32,.96);
+    color: #f3f3f3;
+}
+
+#gptopt-nav-popup .gptopt-nav-row {
+    min-height: 54px;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 16px;
+}
+
+#gptopt-nav-popup .gptopt-nav-row:hover,
+#gptopt-nav-popup .gptopt-nav-row:focus-visible {
+    background: rgba(127,127,127,.12) !important;
+    opacity: 1;
+}
+
+#gptopt-nav-popup .gptopt-nav-row.is-active {
+    background: rgba(127,127,127,.16) !important;
+    box-shadow: none;
+    font-weight: 700;
 }
 
 .gptopt-nav-flash {
@@ -364,8 +480,11 @@ html.dark #gptopt-nav-rail {
 
         exchanges = scanExchanges(ctx);
 
-        // The rail handle is deliberately visible even when zero turns are found.
-        // That makes selector breakage diagnosable instead of looking like the script never ran.
+        const navMode = ctx.mode === 'frame' ? 'text' : 'compact';
+        rail.classList.toggle('is-text', navMode === 'text');
+        rail.classList.toggle('is-compact', navMode === 'compact');
+
+        // Keep an entry visible even if selectors temporarily fail.
         rail.hidden = false;
 
         if (exchanges.length >= SETTINGS.minItems) {
@@ -374,10 +493,13 @@ html.dark #gptopt-nav-rail {
             unbindScrollOwner();
         }
 
-        const signature = exchanges.map((item) => `${item.key}\u0000${item.label}`).join('\u0001');
+        const signature =
+            navMode + '\u0002' +
+            exchanges.map((item) => `${item.key}\u0000${item.label}`).join('\u0001');
+
         if (signature !== lastSignature || rail.childElementCount === 0) {
             lastSignature = signature;
-            renderRail();
+            renderRail(ctx);
             renderPopup(ctx);
         }
 
@@ -503,22 +625,119 @@ html.dark #gptopt-nav-rail {
         return clean.length <= SETTINGS.labelChars ? clean : clean.slice(0, SETTINGS.labelChars - 1) + '…';
     }
 
-    function renderRail() {
+    function renderRail(ctx = getContext()) {
         rail.replaceChildren();
 
-        const heading = uiDoc.createElement('div');
-        heading.className = 'gptopt-nav-heading';
-        heading.textContent = exchanges.length ? `会话导航 · ${exchanges.length}` : '会话导航';
-        rail.appendChild(heading);
+        if (ctx.mode === 'frame') {
+            // Remote/rotated mode: persistent text only.
+            // No "会话导航 · N" heading and no backing panel.
+            if (!exchanges.length) {
+                const empty = uiDoc.createElement('div');
+                empty.className = 'gptopt-nav-row';
+                empty.style.cursor = 'default';
+
+                const mark = uiDoc.createElement('span');
+                mark.className = 'gptopt-nav-index';
+                mark.textContent = '!';
+
+                const label = uiDoc.createElement('span');
+                label.className = 'gptopt-nav-label';
+                label.textContent = '未识别到会话轮次';
+
+                empty.append(mark, label);
+                rail.appendChild(empty);
+                return;
+            }
+
+            exchanges.forEach((exchange, index) => {
+                const row = uiDoc.createElement('button');
+                row.type = 'button';
+                row.className = 'gptopt-nav-row';
+                row.dataset.index = String(index);
+                row.title = exchange.label;
+                row.setAttribute('aria-label', `${index + 1}. ${exchange.label}`);
+
+                const number = uiDoc.createElement('span');
+                number.className = 'gptopt-nav-index';
+                number.textContent = String(index + 1);
+
+                const label = uiDoc.createElement('span');
+                label.className = 'gptopt-nav-label';
+                label.textContent = shortLabel(exchange.label);
+
+                row.append(number, label);
+                row.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    jumpToExchange(index);
+                });
+
+                rail.appendChild(row);
+            });
+
+            return;
+        }
+
+        // Normal/unrotated mode: restore the previous compact ticks + popup.
+        const menu = uiDoc.createElement('button');
+        menu.type = 'button';
+        menu.className = 'gptopt-nav-menu';
+        menu.textContent = '≡';
+        menu.title = '会话导航';
+        menu.setAttribute('aria-label', '打开会话导航');
+        menu.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            popup.hidden = !popup.hidden;
+            if (!popup.hidden) refreshActiveUi();
+        });
+        rail.appendChild(menu);
+
+        exchanges.forEach((exchange, index) => {
+            const button = uiDoc.createElement('button');
+            button.type = 'button';
+            button.className = 'gptopt-nav-tick';
+            button.dataset.index = String(index);
+            button.title = shortLabel(exchange.label);
+            button.setAttribute('aria-label', `${index + 1}. ${shortLabel(exchange.label)}`);
+
+            const bar = uiDoc.createElement('span');
+            button.appendChild(bar);
+
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                jumpToExchange(index);
+            });
+
+            rail.appendChild(button);
+        });
+    }
+
+    function renderPopup(ctx = getContext()) {
+        popup.replaceChildren();
+
+        if (ctx.mode === 'frame') {
+            popup.hidden = true;
+            return;
+        }
 
         if (!exchanges.length) {
-            const empty = uiDoc.createElement('div');
-            empty.className = 'gptopt-nav-row';
-            empty.style.cursor = 'default';
-            empty.innerHTML =
-                '<span class="gptopt-nav-index">!</span>' +
-                '<span class="gptopt-nav-label">未识别到会话轮次</span>';
-            rail.appendChild(empty);
+            const row = uiDoc.createElement('div');
+            row.className = 'gptopt-nav-row';
+            row.style.cursor = 'default';
+
+            const mark = uiDoc.createElement('span');
+            mark.className = 'gptopt-nav-index';
+            mark.textContent = '!';
+
+            const label = uiDoc.createElement('span');
+            label.className = 'gptopt-nav-label';
+            label.textContent = '未识别到会话轮次';
+
+            row.append(mark, label);
+            popup.appendChild(row);
+            popup.hidden = true;
             return;
         }
 
@@ -527,8 +746,7 @@ html.dark #gptopt-nav-rail {
             row.type = 'button';
             row.className = 'gptopt-nav-row';
             row.dataset.index = String(index);
-            row.title = exchange.label;
-            row.setAttribute('aria-label', `${index + 1}. ${exchange.label}`);
+            row.setAttribute('role', 'menuitem');
 
             const number = uiDoc.createElement('span');
             number.className = 'gptopt-nav-index';
@@ -537,21 +755,17 @@ html.dark #gptopt-nav-rail {
             const label = uiDoc.createElement('span');
             label.className = 'gptopt-nav-label';
             label.textContent = shortLabel(exchange.label);
+            label.title = exchange.label;
 
             row.append(number, label);
-            row.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
+            row.addEventListener('click', () => {
                 jumpToExchange(index);
+                popup.hidden = true;
             });
 
-            rail.appendChild(row);
+            popup.appendChild(row);
         });
-    }
 
-    function renderPopup() {
-        if (!popup) return;
-        popup.replaceChildren();
         popup.hidden = true;
     }
 
@@ -640,12 +854,25 @@ html.dark #gptopt-nav-rail {
     }
 
     function refreshActiveUi() {
-        rail?.querySelectorAll('.gptopt-nav-row[data-index]').forEach((row) => {
+        rail?.querySelectorAll('.gptopt-nav-tick, .gptopt-nav-row[data-index]').forEach((node) => {
+            node.classList.toggle('is-active', Number(node.dataset.index) === activeIndex);
+        });
+
+        popup?.querySelectorAll('.gptopt-nav-row[data-index]').forEach((row) => {
             row.classList.toggle('is-active', Number(row.dataset.index) === activeIndex);
         });
 
-        const activeRow = rail?.querySelector('.gptopt-nav-row.is-active');
-        activeRow?.scrollIntoView?.({ block: 'nearest' });
+        if (rail?.classList.contains('is-text')) {
+            rail.querySelector('.gptopt-nav-row.is-active')?.scrollIntoView?.({
+                block: 'nearest'
+            });
+        }
+
+        if (popup && !popup.hidden) {
+            popup.querySelector('.gptopt-nav-row.is-active')?.scrollIntoView?.({
+                block: 'nearest'
+            });
+        }
     }
 
     function jumpToExchange(index) {
