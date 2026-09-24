@@ -79,7 +79,7 @@
         // Execute the pinned upstream script inside this Tampermonkey sandbox.
         // Direct eval keeps GM_* grants available to the upstream code and avoids
         // injecting a page <script>, which ChatGPT's CSP may reject.
-        (0, eval)(`${source}\n//# sourceURL=gptopt-conversation-overview-${UPSTREAM.version}.js`);
+        eval(`${source}\n//# sourceURL=gptopt-conversation-overview-${UPSTREAM.version}.js`);
     }
 
     function getConversationOverviewSource(upstream) {
