@@ -57,7 +57,6 @@
     };
 
     let enabled = GM_getValue(NAV_KEY, true);
-    let direction = getFrameDirection();
 
     const labelCache = new Map();
     let exchanges = [];
@@ -83,22 +82,8 @@
     };
 
     installStyles();
-    applyDirection();
     listenForParentSettings();
     start();
-
-    function getFrameDirection() {
-        try {
-            const value = window.frameElement?.dataset?.gptoptDirection;
-            return value === 'ccw' ? 'ccw' : 'cw';
-        } catch (_) {
-            return 'cw';
-        }
-    }
-
-    function applyDirection() {
-        document.documentElement.setAttribute('data-gptopt-direction', direction);
-    }
 
     function listenForParentSettings() {
         window.addEventListener('message', (event) => {
@@ -107,10 +92,6 @@
             if (!data || typeof data !== 'object') return;
 
             if (data.type === 'gptopt-settings') {
-                if (data.direction === 'cw' || data.direction === 'ccw') {
-                    direction = data.direction;
-                    applyDirection();
-                }
                 if (typeof data.navEnabled === 'boolean') {
                     enabled = data.navEnabled;
                     GM_setValue(NAV_KEY, enabled);
@@ -128,34 +109,26 @@
         style.textContent = `
 #gptopt-nav-rail {
     position: fixed;
-    left: 64px;
-    right: 64px;
-    height: 46px;
+    top: 72px;
+    right: 10px;
+    bottom: 112px;
+    width: 46px;
     z-index: 2147483000;
     display: flex;
+    flex-direction: column;
     align-items: center;
     gap: 1px;
-    padding: 0 4px;
+    padding: 4px 0;
     box-sizing: border-box;
     pointer-events: auto;
-    overflow-x: auto;
-    overflow-y: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     scrollbar-width: none;
     color: var(--text-primary, #111);
 }
 
 #gptopt-nav-rail::-webkit-scrollbar {
     display: none;
-}
-
-html[data-gptopt-direction="cw"] #gptopt-nav-rail {
-    top: 8px;
-    bottom: auto;
-}
-
-html[data-gptopt-direction="ccw"] #gptopt-nav-rail {
-    top: auto;
-    bottom: 8px;
 }
 
 #gptopt-nav-rail[hidden],
@@ -176,9 +149,9 @@ html[data-gptopt-direction="ccw"] #gptopt-nav-rail {
 }
 
 .gptopt-nav-menu {
-    flex: 0 0 30px;
-    width: 30px;
-    height: 42px;
+    flex: 0 0 32px;
+    width: 42px;
+    height: 32px;
     border-radius: 10px;
     font: 600 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
     opacity: .72;
@@ -192,9 +165,9 @@ html[data-gptopt-direction="ccw"] #gptopt-nav-rail {
 
 .gptopt-nav-tick {
     flex: 1 1 12px;
-    min-width: 9px;
-    max-width: 24px;
-    height: 42px;
+    min-height: 9px;
+    max-height: 24px;
+    width: 42px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -202,30 +175,31 @@ html[data-gptopt-direction="ccw"] #gptopt-nav-rail {
 }
 
 .gptopt-nav-tick > span {
-    width: 2px;
-    height: 19px;
+    width: 19px;
+    height: 2px;
     border-radius: 999px;
     background: currentColor;
     opacity: .24;
-    transition: height 100ms ease, opacity 100ms ease;
+    transition: width 100ms ease, opacity 100ms ease;
 }
 
 .gptopt-nav-tick:hover > span {
-    height: 25px;
+    width: 25px;
     opacity: .55;
 }
 
 .gptopt-nav-tick.is-active > span {
-    height: 31px;
+    width: 31px;
     opacity: .95;
 }
 
 #gptopt-nav-popup {
     position: fixed;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(560px, calc(100vw - 44px));
-    max-height: min(390px, calc(100vh - 120px));
+    top: 50%;
+    right: 62px;
+    transform: translateY(-50%);
+    width: min(360px, calc(100vw - 90px));
+    max-height: min(620px, calc(100vh - 80px));
     z-index: 2147483001;
     overflow: auto;
     overscroll-behavior: contain;
@@ -239,16 +213,6 @@ html[data-gptopt-direction="ccw"] #gptopt-nav-rail {
     -webkit-backdrop-filter: blur(14px);
     color: var(--text-primary, #111);
     scrollbar-width: thin;
-}
-
-html[data-gptopt-direction="cw"] #gptopt-nav-popup {
-    top: 58px;
-    bottom: auto;
-}
-
-html[data-gptopt-direction="ccw"] #gptopt-nav-popup {
-    top: auto;
-    bottom: 58px;
 }
 
 .gptopt-nav-row {
