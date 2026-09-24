@@ -71,6 +71,7 @@
     let scrollOwner = null;
     let scrollEventTarget = null;
     let lastPath = location.pathname;
+    let lastRenderSignature = '';
 
     const api = {
         token: null,
@@ -308,12 +309,48 @@
             popup.addEventListener('pointerenter', cancelHidePopup);
             popup.addEventListener('pointerleave', scheduleHidePopup);
             document.body.appendChild(popup);
+
+            document.addEventListener(
+                'pointerdown',
+                (event) => {
+                    if (popup.hidden || popup.dataset.pinned !== '1') return;
+                    if (popup.contains(event.target) || rail?.contains(event.target)) return;
+                    hidePopup(true);
+                },
+                true
+            );
         }
     }
 
     function bindObserver() {
         if (observer || !document.body) return;
-        observer = new MutationObserver(() => scheduleRebuild());
+
+        observer = new MutationObserver((mutations) => {
+            for (const mutation of mutations) {
+                const target = mutation.target;
+                if (
+                    target instanceof Node &&
+                    (rail?.contains(target) || popup?.contains(target))
+                ) {
+                    continue;
+                }
+
+                const externalChange = [...mutation.addedNodes, ...mutation.removedNodes].some(
+                    (node) =>
+                        !(node instanceof Node) ||
+                        (!rail?.contains(node) &&
+                            !popup?.contains(node) &&
+                            node !== rail &&
+                            node !== popup)
+                );
+
+                if (externalChange || mutation.addedNodes.length === 0) {
+                    scheduleRebuild();
+                    return;
+                }
+            }
+        });
+
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
@@ -336,13 +373,23 @@
         if (exchanges.length < SETTINGS.minItems) {
             if (rail) rail.hidden = true;
             hidePopup(true);
+            lastRenderSignature = '';
             return;
         }
 
         if (rail) rail.hidden = false;
         bindScrollOwner();
-        renderRail();
-        renderPopup();
+
+        const signature = exchanges
+            .map((exchange) => `${exchange.key}\u0000${exchange.label}`)
+            .join('\u0001');
+
+        if (signature !== lastRenderSignature) {
+            lastRenderSignature = signature;
+            renderRail();
+            renderPopup();
+        }
+
         updateActive();
         prefetchConversationLabels();
     }
@@ -352,6 +399,7 @@
         lastPath = location.pathname;
         labelCache.clear();
         activeIndex = -1;
+        lastRenderSignature = '';
         api.conversationId = null;
         api.groups = null;
         api.pending = false;
