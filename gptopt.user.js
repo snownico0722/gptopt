@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPTOpt - ChatGPT 手机远程横置 + 会话导航
 // @namespace    https://github.com/snownico0722/gptopt
-// @version      1.2.1
+// @version      1.3.0
 // @description  手机远程控制电脑时，将 ChatGPT 放进真实竖向视口后横置 90°；内置轻量、旋转感知的会话快捷导航。
 // @author       snownico0722
 // @match        https://chatgpt.com/*
@@ -63,6 +63,7 @@
 
     let rail = null;
     let popup = null;
+    let uiDoc = null;
     let rebuildTimer = null;
     let periodicTimer = null;
     let activeFrame = 0;
@@ -116,6 +117,7 @@
                     path: safePath(ctx.win),
                     railConnected: Boolean(rail?.isConnected),
                     popupConnected: Boolean(popup?.isConnected),
+                    uiInTargetDocument: uiDoc === ctx.doc,
                     turnShells: ctx.doc.querySelectorAll(
                         'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]'
                     ).length,
@@ -126,19 +128,19 @@
         };
     }
 
-    function installStyles() {
-        const existing = document.getElementById('gptopt-nav-style');
+    function installStyles(doc = document) {
+        const existing = doc.getElementById('gptopt-nav-style');
         if (existing?.isConnected) return;
 
-        const style = existing || document.createElement('style');
+        const style = existing || doc.createElement('style');
         style.id = 'gptopt-nav-style';
         style.textContent = `
 #gptopt-nav-rail {
     position: fixed !important;
-    top: 92px !important;
-    right: 10px !important;
-    bottom: 118px !important;
-    width: 46px !important;
+    top: 82px !important;
+    right: 8px !important;
+    bottom: 108px !important;
+    width: 58px !important;
     z-index: 2147483647 !important;
     display: flex;
     flex-direction: column;
@@ -168,9 +170,9 @@
     touch-action: manipulation;
 }
 .gptopt-nav-menu {
-    flex: 0 0 36px;
-    width: 42px;
-    height: 36px;
+    flex: 0 0 48px;
+    width: 54px;
+    height: 48px;
     border-radius: 10px;
     font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
     opacity: .78;
@@ -179,32 +181,32 @@
 .gptopt-nav-menu:focus-visible { background: rgba(127,127,127,.14); opacity: 1; }
 
 .gptopt-nav-tick {
-    flex: 1 1 11px;
-    min-height: 9px;
-    max-height: 24px;
-    width: 42px;
+    flex: 1 1 14px;
+    min-height: 12px;
+    max-height: 30px;
+    width: 54px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 8px;
 }
 .gptopt-nav-tick > span {
-    width: 18px;
-    height: 3px;
+    width: 24px;
+    height: 4px;
     border-radius: 999px;
     background: currentColor;
     opacity: .33;
     transition: width 100ms ease, opacity 100ms ease;
 }
-.gptopt-nav-tick:hover > span { width: 27px; opacity: .7; }
-.gptopt-nav-tick.is-active > span { width: 34px; opacity: 1; }
+.gptopt-nav-tick:hover > span { width: 34px; opacity: .7; }
+.gptopt-nav-tick.is-active > span { width: 42px; opacity: 1; }
 
 #gptopt-nav-popup {
     position: fixed !important;
     top: 50% !important;
-    right: 62px !important;
+    right: 70px !important;
     transform: translateY(-50%) !important;
-    width: min(420px, calc(100vw - 90px)) !important;
+    width: min(460px, calc(100vw - 100px)) !important;
     max-height: min(660px, calc(100vh - 80px)) !important;
     z-index: 2147483647 !important;
     overflow: auto;
@@ -226,11 +228,11 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
 
 .gptopt-nav-row {
     width: 100%;
-    min-height: 44px;
+    min-height: 54px;
     display: flex;
     align-items: center;
     gap: 9px;
-    padding: 8px 10px;
+    padding: 10px 12px;
     border: 0;
     border-radius: 10px;
     background: transparent;
@@ -238,7 +240,7 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
     text-align: left;
     cursor: pointer;
     touch-action: manipulation;
-    font: 500 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 500 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 .gptopt-nav-row:hover,
 .gptopt-nav-row:focus-visible { background: rgba(127,127,127,.12); }
@@ -262,35 +264,45 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
     border-radius: 10px;
 }
 `;
-        document.documentElement.appendChild(style);
+        doc.documentElement.appendChild(style);
     }
 
-    function installUi() {
-        const init = () => {
-            if (!document.body) return;
+    function installUi(ctx = getContext()) {
+        const mount = () => {
+            const doc = ctx?.doc;
+            if (!doc?.body) return false;
 
-            installStyles();
+            if (uiDoc !== doc) {
+                rail?.remove();
+                popup?.remove();
+                rail = null;
+                popup = null;
+                uiDoc = doc;
+                lastSignature = '';
+            }
+
+            installStyles(doc);
 
             if (!rail) {
-                rail = document.createElement('nav');
+                rail = doc.createElement('nav');
                 rail.id = 'gptopt-nav-rail';
                 rail.setAttribute('aria-label', 'GPTOpt 会话快捷导航');
                 rail.hidden = true;
             }
             if (!rail.isConnected) {
-                document.body.appendChild(rail);
+                doc.body.appendChild(rail);
             }
 
             if (!popup) {
-                popup = document.createElement('div');
+                popup = doc.createElement('div');
                 popup.id = 'gptopt-nav-popup';
                 popup.setAttribute('role', 'menu');
                 popup.hidden = true;
 
-                document.addEventListener(
+                doc.addEventListener(
                     'pointerdown',
                     (event) => {
-                        if (popup.hidden) return;
+                        if (!popup || popup.hidden) return;
                         if (popup.contains(event.target) || rail?.contains(event.target)) return;
                         popup.hidden = true;
                     },
@@ -298,20 +310,18 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
                 );
             }
             if (!popup.isConnected) {
-                document.body.appendChild(popup);
+                doc.body.appendChild(popup);
             }
+
+            return true;
         };
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init, { once: true });
-        } else {
-            init();
-        }
+        if (mount()) return;
+        setTimeout(() => installUi(getContext()), 80);
     }
 
     function start() {
         const begin = () => {
-            installUi();
             scheduleRebuild();
             periodicTimer = setInterval(scheduleRebuild, SETTINGS.periodicMs);
         };
@@ -347,8 +357,9 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
     }
 
     function rebuild() {
-        installUi();
-        if (!rail || !popup) return;
+        const ctx = getContext();
+        installUi(ctx);
+        if (!rail || !popup || uiDoc !== ctx.doc) return;
 
         if (!enabled) {
             rail.hidden = true;
@@ -356,7 +367,6 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
             return;
         }
 
-        const ctx = getContext();
         const path = safePath(ctx.win);
         if (ctx.key !== lastContextKey || path !== lastPath) {
             lastContextKey = ctx.key;
@@ -515,7 +525,7 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
     function renderRail() {
         rail.replaceChildren();
 
-        const menu = document.createElement('button');
+        const menu = uiDoc.createElement('button');
         menu.type = 'button';
         menu.className = 'gptopt-nav-menu';
         menu.textContent = '≡';
@@ -530,13 +540,13 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
         rail.appendChild(menu);
 
         exchanges.forEach((exchange, index) => {
-            const button = document.createElement('button');
+            const button = uiDoc.createElement('button');
             button.type = 'button';
             button.className = 'gptopt-nav-tick';
             button.dataset.index = String(index);
             button.title = shortLabel(exchange.label);
             button.setAttribute('aria-label', `${index + 1}. ${shortLabel(exchange.label)}`);
-            button.appendChild(document.createElement('span'));
+            button.appendChild(uiDoc.createElement('span'));
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -551,7 +561,7 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
         popup.replaceChildren();
 
         if (!exchanges.length) {
-            const row = document.createElement('div');
+            const row = uiDoc.createElement('div');
             row.className = 'gptopt-nav-row';
             row.style.cursor = 'default';
             row.innerHTML =
@@ -565,17 +575,17 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
         }
 
         exchanges.forEach((exchange, index) => {
-            const row = document.createElement('button');
+            const row = uiDoc.createElement('button');
             row.type = 'button';
             row.className = 'gptopt-nav-row';
             row.dataset.index = String(index);
             row.setAttribute('role', 'menuitem');
 
-            const number = document.createElement('span');
+            const number = uiDoc.createElement('span');
             number.className = 'gptopt-nav-index';
             number.textContent = String(index + 1);
 
-            const label = document.createElement('span');
+            const label = uiDoc.createElement('span');
             label.className = 'gptopt-nav-label';
             label.textContent = shortLabel(exchange.label);
             label.title = exchange.label;
@@ -911,6 +921,83 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
             } else {
                 frame.style.transform = `matrix(0, -1, 1, 0, 0, ${H})`;
             }
+
+            applyRemoteTouchOptimization();
+            window.__GPTOPT_NAV__?.rebuild();
+        }
+
+        function applyRemoteTouchOptimization() {
+            if (!frame?.isConnected) return;
+
+            let doc;
+            try {
+                doc = frame.contentDocument;
+            } catch (_) {
+                return;
+            }
+            if (!doc?.documentElement) return;
+
+            doc.documentElement.classList.add('gptopt-remote-touch');
+
+            let style = doc.getElementById('gptopt-remote-touch-style');
+            if (!style) {
+                style = doc.createElement('style');
+                style.id = 'gptopt-remote-touch-style';
+                style.textContent = `
+html.gptopt-remote-touch {
+    --gptopt-touch-min: 46px;
+}
+
+html.gptopt-remote-touch :where(button, [role="button"], [role="menuitem"], [role="option"]) {
+    touch-action: manipulation !important;
+}
+
+html.gptopt-remote-touch :where(header, nav, aside, form[data-type="unified-composer"], [data-message-author-role])
+:where(button, [role="button"]) {
+    min-width: var(--gptopt-touch-min) !important;
+    min-height: var(--gptopt-touch-min) !important;
+}
+
+html.gptopt-remote-touch :where([role="menuitem"], [role="option"]) {
+    min-height: 50px !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+    font-size: 16px !important;
+}
+
+html.gptopt-remote-touch #prompt-textarea {
+    min-height: 66px !important;
+    font-size: 18px !important;
+    line-height: 1.55 !important;
+}
+
+html.gptopt-remote-touch form[data-type="unified-composer"] {
+    min-height: 74px !important;
+}
+
+html.gptopt-remote-touch form[data-type="unified-composer"] :where(button, [role="button"]) {
+    min-width: 50px !important;
+    min-height: 50px !important;
+}
+
+html.gptopt-remote-touch [data-message-author-role] :where(button, [role="button"]) {
+    min-width: 44px !important;
+    min-height: 44px !important;
+}
+
+html.gptopt-remote-touch ::-webkit-scrollbar {
+    width: 16px !important;
+    height: 16px !important;
+}
+
+html.gptopt-remote-touch input,
+html.gptopt-remote-touch textarea,
+html.gptopt-remote-touch [contenteditable="true"] {
+    caret-width: 2px;
+}
+`;
+                doc.documentElement.appendChild(style);
+            }
         }
 
         function verifyFrame() {
@@ -935,6 +1022,9 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
             clearTimeout(loadTimer);
             document.documentElement.classList.add('gptopt-frame-ready');
             updateFrameGeometry();
+            applyRemoteTouchOptimization();
+            setTimeout(applyRemoteTouchOptimization, 600);
+            window.__GPTOPT_NAV__?.rebuild();
             startUrlSync();
             rebuildMenus();
         }
@@ -1027,6 +1117,8 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
                 frame.remove();
                 frame = null;
             }
+
+            window.__GPTOPT_NAV__?.rebuild();
 
             if (reloadOuter && currentUrl) {
                 window.location.href = currentUrl;
