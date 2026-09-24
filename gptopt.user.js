@@ -795,7 +795,7 @@ html.gptopt-frame-mode body {
     overflow: hidden !important;
 }
 
-html.gptopt-frame-ready body > *:not(#${REMOTE_FRAME_ID}) {
+html.gptopt-frame-ready body > *:not(#${REMOTE_FRAME_ID}):not(#gptopt-nav-rail):not(#gptopt-nav-popup) {
     visibility: hidden !important;
     pointer-events: none !important;
 }
