@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPTOpt - ChatGPT 手机远程横置 + 会话导航
 // @namespace    https://github.com/snownico0722/gptopt
-// @version      1.5.0
+// @version      1.2.2
 // @description  手机远程控制电脑时，将 ChatGPT 放进真实竖向视口后横置 90°；内置轻量、旋转感知的会话快捷导航。
 // @author       snownico0722
 // @match        https://chatgpt.com/*
@@ -14,8 +14,8 @@
 // @grant        GM_unregisterMenuCommand
 // @homepageURL  https://github.com/snownico0722/gptopt
 // @supportURL   https://github.com/snownico0722/gptopt/issues
-// @downloadURL  https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt.user.js
-// @updateURL    https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt.user.js
+// @downloadURL  https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt-1.2.2-test.user.js
+// @updateURL    https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt-1.2.2-test.user.js
 // ==/UserScript==
 
 (function () {
@@ -63,7 +63,6 @@
 
     let rail = null;
     let popup = null;
-    let uiDoc = null;
     let rebuildTimer = null;
     let periodicTimer = null;
     let activeFrame = 0;
@@ -117,7 +116,6 @@
                     path: safePath(ctx.win),
                     railConnected: Boolean(rail?.isConnected),
                     popupConnected: Boolean(popup?.isConnected),
-                    uiInTargetDocument: uiDoc === ctx.doc,
                     turnShells: ctx.doc.querySelectorAll(
                         'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]'
                     ).length,
@@ -128,49 +126,35 @@
         };
     }
 
-    function installStyles(doc = document) {
-        const existing = doc.getElementById('gptopt-nav-style');
+    function installStyles() {
+        const existing = document.getElementById('gptopt-nav-style');
         if (existing?.isConnected) return;
 
-        const style = existing || doc.createElement('style');
+        const style = existing || document.createElement('style');
         style.id = 'gptopt-nav-style';
         style.textContent = `
 #gptopt-nav-rail {
     position: fixed !important;
+    top: 92px !important;
+    right: 10px !important;
+    bottom: 118px !important;
+    width: 46px !important;
     z-index: 2147483647 !important;
-    box-sizing: border-box;
-    pointer-events: auto !important;
-    visibility: visible !important;
-    color: #5f6368;
-}
-
-#gptopt-nav-rail[hidden],
-#gptopt-nav-popup[hidden] {
-    display: none !important;
-}
-
-/* Normal / unrotated mode: keep the earlier compact rail experience. */
-#gptopt-nav-rail.is-compact {
-    top: 82px !important;
-    right: 8px !important;
-    bottom: 108px !important;
-    width: 58px !important;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 1px;
     padding: 4px 0;
+    box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: none;
-    background: transparent !important;
-    border: 0 !important;
-    box-shadow: none !important;
+    color: #5f6368;
+    pointer-events: auto !important;
+    visibility: visible !important;
 }
-
-#gptopt-nav-rail.is-compact::-webkit-scrollbar {
-    display: none;
-}
+#gptopt-nav-rail::-webkit-scrollbar { display: none; }
+#gptopt-nav-rail[hidden], #gptopt-nav-popup[hidden] { display: none !important; }
 
 .gptopt-nav-menu,
 .gptopt-nav-tick {
@@ -183,136 +167,44 @@
     cursor: pointer;
     touch-action: manipulation;
 }
-
 .gptopt-nav-menu {
-    flex: 0 0 48px;
-    width: 54px;
-    height: 48px;
+    flex: 0 0 36px;
+    width: 42px;
+    height: 36px;
     border-radius: 10px;
     font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
     opacity: .78;
 }
-
 .gptopt-nav-menu:hover,
-.gptopt-nav-menu:focus-visible {
-    background: rgba(127,127,127,.14);
-    opacity: 1;
-}
+.gptopt-nav-menu:focus-visible { background: rgba(127,127,127,.14); opacity: 1; }
 
 .gptopt-nav-tick {
-    flex: 1 1 14px;
-    min-height: 12px;
-    max-height: 30px;
-    width: 54px;
+    flex: 1 1 11px;
+    min-height: 9px;
+    max-height: 24px;
+    width: 42px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 8px;
 }
-
 .gptopt-nav-tick > span {
-    width: 24px;
-    height: 4px;
+    width: 18px;
+    height: 3px;
     border-radius: 999px;
     background: currentColor;
     opacity: .33;
     transition: width 100ms ease, opacity 100ms ease;
 }
+.gptopt-nav-tick:hover > span { width: 27px; opacity: .7; }
+.gptopt-nav-tick.is-active > span { width: 34px; opacity: 1; }
 
-.gptopt-nav-tick:hover > span {
-    width: 34px;
-    opacity: .7;
-}
-
-.gptopt-nav-tick.is-active > span {
-    width: 42px;
-    opacity: 1;
-}
-
-/* Rotated remote mode: persistent text, no title and no backing panel. */
-#gptopt-nav-rail.is-text {
-    top: 74px !important;
-    right: 8px !important;
-    bottom: 104px !important;
-    width: 220px !important;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    scrollbar-width: thin;
-
-    background: transparent !important;
-    border: 0 !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-}
-
-.gptopt-nav-row {
-    appearance: none;
-    width: 100%;
-    min-height: 62px;
-    display: grid;
-    grid-template-columns: 30px minmax(0, 1fr);
-    align-items: center;
-    gap: 10px;
-    padding: 10px 8px;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent !important;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-    touch-action: manipulation;
-    font: 600 16px/1.32 system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-
-#gptopt-nav-rail.is-text .gptopt-nav-row:hover,
-#gptopt-nav-rail.is-text .gptopt-nav-row:focus-visible {
-    background: transparent !important;
-    opacity: .72;
-}
-
-#gptopt-nav-rail.is-text .gptopt-nav-row.is-active {
-    background: transparent !important;
-    box-shadow: inset 4px 0 0 #10a37f;
-    color: var(--text-primary, currentColor);
-    font-weight: 750;
-    opacity: 1;
-}
-
-.gptopt-nav-index {
-    min-width: 30px;
-    font-size: 14px;
-    opacity: .52;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-}
-
-.gptopt-nav-label {
-    min-width: 0;
-    overflow: hidden;
-}
-
-#gptopt-nav-rail.is-text .gptopt-nav-label {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    white-space: normal;
-    overflow-wrap: anywhere;
-}
-
-/* Compact-mode popup. */
 #gptopt-nav-popup {
     position: fixed !important;
     top: 50% !important;
-    right: 70px !important;
+    right: 62px !important;
     transform: translateY(-50%) !important;
-    width: min(460px, calc(100vw - 100px)) !important;
+    width: min(420px, calc(100vw - 90px)) !important;
     max-height: min(660px, calc(100vh - 80px)) !important;
     z-index: 2147483647 !important;
     overflow: auto;
@@ -330,76 +222,75 @@
     pointer-events: auto !important;
     visibility: visible !important;
 }
+html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
 
-html.dark #gptopt-nav-popup {
-    background: rgba(32,32,32,.96);
-    color: #f3f3f3;
-}
-
-#gptopt-nav-popup .gptopt-nav-row {
-    min-height: 54px;
+.gptopt-nav-row {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 10px;
+    border: 0;
     border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 16px;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+    font: 500 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-
-#gptopt-nav-popup .gptopt-nav-row:hover,
-#gptopt-nav-popup .gptopt-nav-row:focus-visible {
-    background: rgba(127,127,127,.12) !important;
-    opacity: 1;
+.gptopt-nav-row:hover,
+.gptopt-nav-row:focus-visible { background: rgba(127,127,127,.12); }
+.gptopt-nav-row.is-active { background: rgba(127,127,127,.16); font-weight: 700; }
+.gptopt-nav-index {
+    flex: 0 0 auto;
+    min-width: 26px;
+    opacity: .48;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
 }
-
-#gptopt-nav-popup .gptopt-nav-row.is-active {
-    background: rgba(127,127,127,.16) !important;
-    box-shadow: none;
-    font-weight: 700;
+.gptopt-nav-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
-
 .gptopt-nav-flash {
     outline: 2px solid #10a37f !important;
     outline-offset: 4px !important;
     border-radius: 10px;
 }
 `;
-        doc.documentElement.appendChild(style);
+        document.documentElement.appendChild(style);
     }
 
-    function installUi(ctx = getContext()) {
-        const mount = () => {
-            const doc = ctx?.doc;
-            if (!doc?.body) return false;
+    function installUi() {
+        const init = () => {
+            if (!document.body) return;
 
-            if (uiDoc !== doc) {
-                rail?.remove();
-                popup?.remove();
-                rail = null;
-                popup = null;
-                uiDoc = doc;
-                lastSignature = '';
-            }
-
-            installStyles(doc);
+            installStyles();
 
             if (!rail) {
-                rail = doc.createElement('nav');
+                rail = document.createElement('nav');
                 rail.id = 'gptopt-nav-rail';
                 rail.setAttribute('aria-label', 'GPTOpt 会话快捷导航');
                 rail.hidden = true;
             }
             if (!rail.isConnected) {
-                doc.body.appendChild(rail);
+                document.body.appendChild(rail);
             }
 
             if (!popup) {
-                popup = doc.createElement('div');
+                popup = document.createElement('div');
                 popup.id = 'gptopt-nav-popup';
                 popup.setAttribute('role', 'menu');
                 popup.hidden = true;
 
-                doc.addEventListener(
+                document.addEventListener(
                     'pointerdown',
                     (event) => {
-                        if (!popup || popup.hidden) return;
+                        if (popup.hidden) return;
                         if (popup.contains(event.target) || rail?.contains(event.target)) return;
                         popup.hidden = true;
                     },
@@ -407,18 +298,20 @@ html.dark #gptopt-nav-popup {
                 );
             }
             if (!popup.isConnected) {
-                doc.body.appendChild(popup);
+                document.body.appendChild(popup);
             }
-
-            return true;
         };
 
-        if (mount()) return;
-        setTimeout(() => installUi(getContext()), 80);
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init, { once: true });
+        } else {
+            init();
+        }
     }
 
     function start() {
         const begin = () => {
+            installUi();
             scheduleRebuild();
             periodicTimer = setInterval(scheduleRebuild, SETTINGS.periodicMs);
         };
@@ -454,9 +347,8 @@ html.dark #gptopt-nav-popup {
     }
 
     function rebuild() {
-        const ctx = getContext();
-        installUi(ctx);
-        if (!rail || !popup || uiDoc !== ctx.doc) return;
+        installUi();
+        if (!rail || !popup) return;
 
         if (!enabled) {
             rail.hidden = true;
@@ -464,6 +356,7 @@ html.dark #gptopt-nav-popup {
             return;
         }
 
+        const ctx = getContext();
         const path = safePath(ctx.win);
         if (ctx.key !== lastContextKey || path !== lastPath) {
             lastContextKey = ctx.key;
@@ -480,11 +373,8 @@ html.dark #gptopt-nav-popup {
 
         exchanges = scanExchanges(ctx);
 
-        const navMode = ctx.mode === 'frame' ? 'text' : 'compact';
-        rail.classList.toggle('is-text', navMode === 'text');
-        rail.classList.toggle('is-compact', navMode === 'compact');
-
-        // Keep an entry visible even if selectors temporarily fail.
+        // The rail handle is deliberately visible even when zero turns are found.
+        // That makes selector breakage diagnosable instead of looking like the script never ran.
         rail.hidden = false;
 
         if (exchanges.length >= SETTINGS.minItems) {
@@ -493,13 +383,10 @@ html.dark #gptopt-nav-popup {
             unbindScrollOwner();
         }
 
-        const signature =
-            navMode + '\u0002' +
-            exchanges.map((item) => `${item.key}\u0000${item.label}`).join('\u0001');
-
+        const signature = exchanges.map((item) => `${item.key}\u0000${item.label}`).join('\u0001');
         if (signature !== lastSignature || rail.childElementCount === 0) {
             lastSignature = signature;
-            renderRail(ctx);
+            renderRail();
             renderPopup(ctx);
         }
 
@@ -625,61 +512,10 @@ html.dark #gptopt-nav-popup {
         return clean.length <= SETTINGS.labelChars ? clean : clean.slice(0, SETTINGS.labelChars - 1) + '…';
     }
 
-    function renderRail(ctx = getContext()) {
+    function renderRail() {
         rail.replaceChildren();
 
-        if (ctx.mode === 'frame') {
-            // Remote/rotated mode: persistent text only.
-            // No "会话导航 · N" heading and no backing panel.
-            if (!exchanges.length) {
-                const empty = uiDoc.createElement('div');
-                empty.className = 'gptopt-nav-row';
-                empty.style.cursor = 'default';
-
-                const mark = uiDoc.createElement('span');
-                mark.className = 'gptopt-nav-index';
-                mark.textContent = '!';
-
-                const label = uiDoc.createElement('span');
-                label.className = 'gptopt-nav-label';
-                label.textContent = '未识别到会话轮次';
-
-                empty.append(mark, label);
-                rail.appendChild(empty);
-                return;
-            }
-
-            exchanges.forEach((exchange, index) => {
-                const row = uiDoc.createElement('button');
-                row.type = 'button';
-                row.className = 'gptopt-nav-row';
-                row.dataset.index = String(index);
-                row.title = exchange.label;
-                row.setAttribute('aria-label', `${index + 1}. ${exchange.label}`);
-
-                const number = uiDoc.createElement('span');
-                number.className = 'gptopt-nav-index';
-                number.textContent = String(index + 1);
-
-                const label = uiDoc.createElement('span');
-                label.className = 'gptopt-nav-label';
-                label.textContent = shortLabel(exchange.label);
-
-                row.append(number, label);
-                row.addEventListener('click', (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    jumpToExchange(index);
-                });
-
-                rail.appendChild(row);
-            });
-
-            return;
-        }
-
-        // Normal/unrotated mode: restore the previous compact ticks + popup.
-        const menu = uiDoc.createElement('button');
+        const menu = document.createElement('button');
         menu.type = 'button';
         menu.className = 'gptopt-nav-menu';
         menu.textContent = '≡';
@@ -694,65 +530,52 @@ html.dark #gptopt-nav-popup {
         rail.appendChild(menu);
 
         exchanges.forEach((exchange, index) => {
-            const button = uiDoc.createElement('button');
+            const button = document.createElement('button');
             button.type = 'button';
             button.className = 'gptopt-nav-tick';
             button.dataset.index = String(index);
             button.title = shortLabel(exchange.label);
             button.setAttribute('aria-label', `${index + 1}. ${shortLabel(exchange.label)}`);
-
-            const bar = uiDoc.createElement('span');
-            button.appendChild(bar);
-
+            button.appendChild(document.createElement('span'));
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 jumpToExchange(index);
             });
-
             rail.appendChild(button);
         });
     }
 
     function renderPopup(ctx = getContext()) {
+        const wasHidden = popup.hidden;
         popup.replaceChildren();
 
-        if (ctx.mode === 'frame') {
-            popup.hidden = true;
-            return;
-        }
-
         if (!exchanges.length) {
-            const row = uiDoc.createElement('div');
+            const row = document.createElement('div');
             row.className = 'gptopt-nav-row';
             row.style.cursor = 'default';
-
-            const mark = uiDoc.createElement('span');
-            mark.className = 'gptopt-nav-index';
-            mark.textContent = '!';
-
-            const label = uiDoc.createElement('span');
-            label.className = 'gptopt-nav-label';
-            label.textContent = '未识别到会话轮次';
-
-            row.append(mark, label);
+            row.innerHTML =
+                '<span class="gptopt-nav-index">!</span>' +
+                '<span class="gptopt-nav-label">未识别到会话轮次（' +
+                (ctx.mode === 'frame' ? '横置 iframe' : '普通页面') +
+                '）</span>';
             popup.appendChild(row);
-            popup.hidden = true;
+            popup.hidden = wasHidden;
             return;
         }
 
         exchanges.forEach((exchange, index) => {
-            const row = uiDoc.createElement('button');
+            const row = document.createElement('button');
             row.type = 'button';
             row.className = 'gptopt-nav-row';
             row.dataset.index = String(index);
             row.setAttribute('role', 'menuitem');
 
-            const number = uiDoc.createElement('span');
+            const number = document.createElement('span');
             number.className = 'gptopt-nav-index';
             number.textContent = String(index + 1);
 
-            const label = uiDoc.createElement('span');
+            const label = document.createElement('span');
             label.className = 'gptopt-nav-label';
             label.textContent = shortLabel(exchange.label);
             label.title = exchange.label;
@@ -762,11 +585,9 @@ html.dark #gptopt-nav-popup {
                 jumpToExchange(index);
                 popup.hidden = true;
             });
-
             popup.appendChild(row);
         });
-
-        popup.hidden = true;
+        popup.hidden = wasHidden;
     }
 
     function findScrollContainer(element, ctx) {
@@ -854,24 +675,14 @@ html.dark #gptopt-nav-popup {
     }
 
     function refreshActiveUi() {
-        rail?.querySelectorAll('.gptopt-nav-tick, .gptopt-nav-row[data-index]').forEach((node) => {
-            node.classList.toggle('is-active', Number(node.dataset.index) === activeIndex);
+        rail?.querySelectorAll('.gptopt-nav-tick').forEach((button) => {
+            button.classList.toggle('is-active', Number(button.dataset.index) === activeIndex);
         });
-
-        popup?.querySelectorAll('.gptopt-nav-row[data-index]').forEach((row) => {
+        popup?.querySelectorAll('.gptopt-nav-row').forEach((row) => {
             row.classList.toggle('is-active', Number(row.dataset.index) === activeIndex);
         });
-
-        if (rail?.classList.contains('is-text')) {
-            rail.querySelector('.gptopt-nav-row.is-active')?.scrollIntoView?.({
-                block: 'nearest'
-            });
-        }
-
         if (popup && !popup.hidden) {
-            popup.querySelector('.gptopt-nav-row.is-active')?.scrollIntoView?.({
-                block: 'nearest'
-            });
+            popup.querySelector('.gptopt-nav-row.is-active')?.scrollIntoView?.({ block: 'nearest' });
         }
     }
 
@@ -1100,98 +911,6 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
             } else {
                 frame.style.transform = `matrix(0, -1, 1, 0, 0, ${H})`;
             }
-
-            applyRemoteTouchOptimization();
-            window.__GPTOPT_NAV__?.rebuild();
-        }
-
-        function applyRemoteTouchOptimization() {
-            if (!frame?.isConnected) return;
-
-            let doc;
-            try {
-                doc = frame.contentDocument;
-            } catch (_) {
-                return;
-            }
-            if (!doc?.documentElement) return;
-
-            doc.documentElement.classList.add('gptopt-remote-touch');
-
-            let style = doc.getElementById('gptopt-remote-touch-style');
-            if (!style) {
-                style = doc.createElement('style');
-                style.id = 'gptopt-remote-touch-style';
-                style.textContent = `
-html.gptopt-remote-touch {
-    --gptopt-touch-min: 52px;
-    font-size: 17px !important;
-}
-
-/* Slightly enlarge the actual ChatGPT UI without transform/zoom blur. */
-html.gptopt-remote-touch body {
-    font-size: 17px !important;
-}
-
-html.gptopt-remote-touch :where(button, [role="button"], [role="menuitem"], [role="option"], a) {
-    touch-action: manipulation !important;
-}
-
-html.gptopt-remote-touch :where(header, nav, aside, form[data-type="unified-composer"], [data-message-author-role])
-:where(button, [role="button"]) {
-    min-width: var(--gptopt-touch-min) !important;
-    min-height: var(--gptopt-touch-min) !important;
-}
-
-html.gptopt-remote-touch :where(aside, nav)
-:where(a, [role="link"], button, [role="button"]) {
-    min-height: 50px !important;
-}
-
-html.gptopt-remote-touch :where([role="menuitem"], [role="option"]) {
-    min-height: 56px !important;
-    padding-top: 12px !important;
-    padding-bottom: 12px !important;
-    font-size: 17px !important;
-}
-
-/* Composer: make the whole bottom interaction zone substantially larger. */
-html.gptopt-remote-touch form[data-type="unified-composer"] {
-    min-height: 96px !important;
-    padding-top: 6px !important;
-    padding-bottom: 6px !important;
-}
-
-html.gptopt-remote-touch #prompt-textarea {
-    min-height: 82px !important;
-    max-height: 44vh !important;
-    font-size: 19px !important;
-    line-height: 1.58 !important;
-}
-
-html.gptopt-remote-touch form[data-type="unified-composer"] :where(button, [role="button"]) {
-    min-width: 58px !important;
-    min-height: 58px !important;
-}
-
-html.gptopt-remote-touch [data-message-author-role] :where(button, [role="button"]) {
-    min-width: 48px !important;
-    min-height: 48px !important;
-}
-
-html.gptopt-remote-touch [data-message-author-role]
-:where(p, li, blockquote, td, th) {
-    font-size: 17px !important;
-    line-height: 1.68 !important;
-}
-
-html.gptopt-remote-touch ::-webkit-scrollbar {
-    width: 18px !important;
-    height: 18px !important;
-}
-`;
-                doc.documentElement.appendChild(style);
-            }
         }
 
         function verifyFrame() {
@@ -1216,9 +935,6 @@ html.gptopt-remote-touch ::-webkit-scrollbar {
             clearTimeout(loadTimer);
             document.documentElement.classList.add('gptopt-frame-ready');
             updateFrameGeometry();
-            applyRemoteTouchOptimization();
-            setTimeout(applyRemoteTouchOptimization, 600);
-            window.__GPTOPT_NAV__?.rebuild();
             startUrlSync();
             rebuildMenus();
         }
@@ -1311,8 +1027,6 @@ html.gptopt-remote-touch ::-webkit-scrollbar {
                 frame.remove();
                 frame = null;
             }
-
-            window.__GPTOPT_NAV__?.rebuild();
 
             if (reloadOuter && currentUrl) {
                 window.location.href = currentUrl;
