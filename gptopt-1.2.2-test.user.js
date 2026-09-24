@@ -15,7 +15,7 @@
 // @homepageURL  https://github.com/snownico0722/gptopt
 // @supportURL   https://github.com/snownico0722/gptopt/issues
 // @downloadURL  https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt-1.2.2-test.user.js
-// @updateURL    https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt.user.js
+// @updateURL    https://raw.githubusercontent.com/snownico0722/gptopt/fix/navigation-overlay/gptopt-1.2.2-test.user.js
 // ==/UserScript==
 
 (function () {
