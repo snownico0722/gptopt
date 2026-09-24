@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPTOpt - ChatGPT 手机远程横置 + 会话导航
 // @namespace    https://github.com/snownico0722/gptopt
-// @version      1.3.0
+// @version      1.4.0
 // @description  手机远程控制电脑时，将 ChatGPT 放进真实竖向视口后横置 90°；内置轻量、旋转感知的会话快捷导航。
 // @author       snownico0722
 // @match        https://chatgpt.com/*
@@ -137,127 +137,108 @@
         style.textContent = `
 #gptopt-nav-rail {
     position: fixed !important;
-    top: 82px !important;
+    top: 74px !important;
     right: 8px !important;
-    bottom: 108px !important;
-    width: 58px !important;
+    bottom: 104px !important;
+    width: 220px !important;
     z-index: 2147483647 !important;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 1px;
-    padding: 4px 0;
+    gap: 4px;
+    padding: 8px;
     box-sizing: border-box;
     overflow-x: hidden;
     overflow-y: auto;
-    scrollbar-width: none;
-    color: #5f6368;
+    scrollbar-width: thin;
+    color: #202124;
+    background: rgba(250, 250, 250, .90);
+    border: 1px solid rgba(0, 0, 0, .10);
+    border-radius: 16px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, .12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     pointer-events: auto !important;
     visibility: visible !important;
 }
-#gptopt-nav-rail::-webkit-scrollbar { display: none; }
-#gptopt-nav-rail[hidden], #gptopt-nav-popup[hidden] { display: none !important; }
 
-.gptopt-nav-menu,
-.gptopt-nav-tick {
-    appearance: none;
-    border: 0;
-    margin: 0;
-    padding: 0;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    touch-action: manipulation;
+html.dark #gptopt-nav-rail {
+    color: #f1f3f4;
+    background: rgba(32, 32, 32, .90);
+    border-color: rgba(255, 255, 255, .12);
 }
-.gptopt-nav-menu {
-    flex: 0 0 48px;
-    width: 54px;
-    height: 48px;
-    border-radius: 10px;
-    font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
-    opacity: .78;
-}
-.gptopt-nav-menu:hover,
-.gptopt-nav-menu:focus-visible { background: rgba(127,127,127,.14); opacity: 1; }
 
-.gptopt-nav-tick {
-    flex: 1 1 14px;
-    min-height: 12px;
-    max-height: 30px;
-    width: 54px;
+#gptopt-nav-rail[hidden],
+#gptopt-nav-popup[hidden] {
+    display: none !important;
+}
+
+.gptopt-nav-heading {
+    position: sticky;
+    top: -8px;
+    z-index: 2;
+    min-height: 44px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    border-radius: 8px;
+    padding: 6px 10px;
+    margin: -8px -8px 2px;
+    background: inherit;
+    border-bottom: 1px solid rgba(127, 127, 127, .14);
+    font: 700 15px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-.gptopt-nav-tick > span {
-    width: 24px;
-    height: 4px;
-    border-radius: 999px;
-    background: currentColor;
-    opacity: .33;
-    transition: width 100ms ease, opacity 100ms ease;
-}
-.gptopt-nav-tick:hover > span { width: 34px; opacity: .7; }
-.gptopt-nav-tick.is-active > span { width: 42px; opacity: 1; }
-
-#gptopt-nav-popup {
-    position: fixed !important;
-    top: 50% !important;
-    right: 70px !important;
-    transform: translateY(-50%) !important;
-    width: min(460px, calc(100vw - 100px)) !important;
-    max-height: min(660px, calc(100vh - 80px)) !important;
-    z-index: 2147483647 !important;
-    overflow: auto;
-    overscroll-behavior: contain;
-    padding: 8px;
-    box-sizing: border-box;
-    border: 1px solid rgba(127,127,127,.22);
-    border-radius: 16px;
-    background: rgba(250,250,250,.96);
-    box-shadow: 0 10px 34px rgba(0,0,0,.18);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    color: #111;
-    scrollbar-width: thin;
-    pointer-events: auto !important;
-    visibility: visible !important;
-}
-html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
 
 .gptopt-nav-row {
+    appearance: none;
     width: 100%;
-    min-height: 54px;
-    display: flex;
+    min-height: 62px;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     padding: 10px 12px;
+    margin: 0;
     border: 0;
-    border-radius: 10px;
+    border-radius: 12px;
     background: transparent;
     color: inherit;
     text-align: left;
     cursor: pointer;
     touch-action: manipulation;
-    font: 500 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 550 16px/1.32 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
 .gptopt-nav-row:hover,
-.gptopt-nav-row:focus-visible { background: rgba(127,127,127,.12); }
-.gptopt-nav-row.is-active { background: rgba(127,127,127,.16); font-weight: 700; }
+.gptopt-nav-row:focus-visible {
+    background: rgba(127, 127, 127, .12);
+}
+
+.gptopt-nav-row.is-active {
+    background: rgba(16, 163, 127, .14);
+    box-shadow: inset 3px 0 0 #10a37f;
+    font-weight: 700;
+}
+
 .gptopt-nav-index {
-    flex: 0 0 auto;
-    min-width: 26px;
-    opacity: .48;
+    min-width: 30px;
+    font-size: 14px;
+    opacity: .52;
     font-variant-numeric: tabular-nums;
     text-align: right;
 }
+
 .gptopt-nav-label {
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
+
+#gptopt-nav-popup {
+    display: none !important;
+}
+
 .gptopt-nav-flash {
     outline: 2px solid #10a37f !important;
     outline-offset: 4px !important;
@@ -525,52 +506,19 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
     function renderRail() {
         rail.replaceChildren();
 
-        const menu = uiDoc.createElement('button');
-        menu.type = 'button';
-        menu.className = 'gptopt-nav-menu';
-        menu.textContent = '≡';
-        menu.title = '会话导航';
-        menu.setAttribute('aria-label', '打开会话导航');
-        menu.addEventListener('click', (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            popup.hidden = !popup.hidden;
-            if (!popup.hidden) refreshActiveUi();
-        });
-        rail.appendChild(menu);
-
-        exchanges.forEach((exchange, index) => {
-            const button = uiDoc.createElement('button');
-            button.type = 'button';
-            button.className = 'gptopt-nav-tick';
-            button.dataset.index = String(index);
-            button.title = shortLabel(exchange.label);
-            button.setAttribute('aria-label', `${index + 1}. ${shortLabel(exchange.label)}`);
-            button.appendChild(uiDoc.createElement('span'));
-            button.addEventListener('click', (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                jumpToExchange(index);
-            });
-            rail.appendChild(button);
-        });
-    }
-
-    function renderPopup(ctx = getContext()) {
-        const wasHidden = popup.hidden;
-        popup.replaceChildren();
+        const heading = uiDoc.createElement('div');
+        heading.className = 'gptopt-nav-heading';
+        heading.textContent = exchanges.length ? `会话导航 · ${exchanges.length}` : '会话导航';
+        rail.appendChild(heading);
 
         if (!exchanges.length) {
-            const row = uiDoc.createElement('div');
-            row.className = 'gptopt-nav-row';
-            row.style.cursor = 'default';
-            row.innerHTML =
+            const empty = uiDoc.createElement('div');
+            empty.className = 'gptopt-nav-row';
+            empty.style.cursor = 'default';
+            empty.innerHTML =
                 '<span class="gptopt-nav-index">!</span>' +
-                '<span class="gptopt-nav-label">未识别到会话轮次（' +
-                (ctx.mode === 'frame' ? '横置 iframe' : '普通页面') +
-                '）</span>';
-            popup.appendChild(row);
-            popup.hidden = wasHidden;
+                '<span class="gptopt-nav-label">未识别到会话轮次</span>';
+            rail.appendChild(empty);
             return;
         }
 
@@ -579,7 +527,8 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
             row.type = 'button';
             row.className = 'gptopt-nav-row';
             row.dataset.index = String(index);
-            row.setAttribute('role', 'menuitem');
+            row.title = exchange.label;
+            row.setAttribute('aria-label', `${index + 1}. ${exchange.label}`);
 
             const number = uiDoc.createElement('span');
             number.className = 'gptopt-nav-index';
@@ -588,16 +537,22 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
             const label = uiDoc.createElement('span');
             label.className = 'gptopt-nav-label';
             label.textContent = shortLabel(exchange.label);
-            label.title = exchange.label;
 
             row.append(number, label);
-            row.addEventListener('click', () => {
+            row.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
                 jumpToExchange(index);
-                popup.hidden = true;
             });
-            popup.appendChild(row);
+
+            rail.appendChild(row);
         });
-        popup.hidden = wasHidden;
+    }
+
+    function renderPopup() {
+        if (!popup) return;
+        popup.replaceChildren();
+        popup.hidden = true;
     }
 
     function findScrollContainer(element, ctx) {
@@ -685,15 +640,12 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
     }
 
     function refreshActiveUi() {
-        rail?.querySelectorAll('.gptopt-nav-tick').forEach((button) => {
-            button.classList.toggle('is-active', Number(button.dataset.index) === activeIndex);
-        });
-        popup?.querySelectorAll('.gptopt-nav-row').forEach((row) => {
+        rail?.querySelectorAll('.gptopt-nav-row[data-index]').forEach((row) => {
             row.classList.toggle('is-active', Number(row.dataset.index) === activeIndex);
         });
-        if (popup && !popup.hidden) {
-            popup.querySelector('.gptopt-nav-row.is-active')?.scrollIntoView?.({ block: 'nearest' });
-        }
+
+        const activeRow = rail?.querySelector('.gptopt-nav-row.is-active');
+        activeRow?.scrollIntoView?.({ block: 'nearest' });
     }
 
     function jumpToExchange(index) {
@@ -945,10 +897,16 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
                 style.id = 'gptopt-remote-touch-style';
                 style.textContent = `
 html.gptopt-remote-touch {
-    --gptopt-touch-min: 46px;
+    --gptopt-touch-min: 52px;
+    font-size: 17px !important;
 }
 
-html.gptopt-remote-touch :where(button, [role="button"], [role="menuitem"], [role="option"]) {
+/* Slightly enlarge the actual ChatGPT UI without transform/zoom blur. */
+html.gptopt-remote-touch body {
+    font-size: 17px !important;
+}
+
+html.gptopt-remote-touch :where(button, [role="button"], [role="menuitem"], [role="option"], a) {
     touch-action: manipulation !important;
 }
 
@@ -958,42 +916,51 @@ html.gptopt-remote-touch :where(header, nav, aside, form[data-type="unified-comp
     min-height: var(--gptopt-touch-min) !important;
 }
 
-html.gptopt-remote-touch :where([role="menuitem"], [role="option"]) {
+html.gptopt-remote-touch :where(aside, nav)
+:where(a, [role="link"], button, [role="button"]) {
     min-height: 50px !important;
-    padding-top: 10px !important;
-    padding-bottom: 10px !important;
-    font-size: 16px !important;
+}
+
+html.gptopt-remote-touch :where([role="menuitem"], [role="option"]) {
+    min-height: 56px !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+    font-size: 17px !important;
+}
+
+/* Composer: make the whole bottom interaction zone substantially larger. */
+html.gptopt-remote-touch form[data-type="unified-composer"] {
+    min-height: 96px !important;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
 }
 
 html.gptopt-remote-touch #prompt-textarea {
-    min-height: 66px !important;
-    font-size: 18px !important;
-    line-height: 1.55 !important;
-}
-
-html.gptopt-remote-touch form[data-type="unified-composer"] {
-    min-height: 74px !important;
+    min-height: 82px !important;
+    max-height: 44vh !important;
+    font-size: 19px !important;
+    line-height: 1.58 !important;
 }
 
 html.gptopt-remote-touch form[data-type="unified-composer"] :where(button, [role="button"]) {
-    min-width: 50px !important;
-    min-height: 50px !important;
+    min-width: 58px !important;
+    min-height: 58px !important;
 }
 
 html.gptopt-remote-touch [data-message-author-role] :where(button, [role="button"]) {
-    min-width: 44px !important;
-    min-height: 44px !important;
+    min-width: 48px !important;
+    min-height: 48px !important;
+}
+
+html.gptopt-remote-touch [data-message-author-role]
+:where(p, li, blockquote, td, th) {
+    font-size: 17px !important;
+    line-height: 1.68 !important;
 }
 
 html.gptopt-remote-touch ::-webkit-scrollbar {
-    width: 16px !important;
-    height: 16px !important;
-}
-
-html.gptopt-remote-touch input,
-html.gptopt-remote-touch textarea,
-html.gptopt-remote-touch [contenteditable="true"] {
-    caret-width: 2px;
+    width: 18px !important;
+    height: 18px !important;
 }
 `;
                 doc.documentElement.appendChild(style);
