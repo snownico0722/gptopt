@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GPTOpt - ChatGPT 手机远程横置 + 会话导航
 // @namespace    https://github.com/snownico0722/gptopt
-// @version      1.2.0
+// @version      1.2.1
 // @description  手机远程控制电脑时，将 ChatGPT 放进真实竖向视口后横置 90°；内置轻量、旋转感知的会话快捷导航。
 // @author       snownico0722
 // @match        https://chatgpt.com/*
@@ -53,7 +53,14 @@
         apiRetryMs: 30000
     };
 
+    const MIGRATION_KEY = 'gptopt-nav-overlay-v121-migrated';
     let enabled = GM_getValue(NAV_KEY, true);
+    if (!GM_getValue(MIGRATION_KEY, false)) {
+        enabled = true;
+        GM_setValue(NAV_KEY, true);
+        GM_setValue(MIGRATION_KEY, true);
+    }
+
     let rail = null;
     let popup = null;
     let rebuildTimer = null;
@@ -80,6 +87,12 @@
     installStyles();
     installUi();
     installController();
+
+    GM_registerMenuCommand('🧭 GPTOpt 导航诊断', () => {
+        const status = window.__GPTOPT_NAV__?.status?.() || { error: 'navigator controller missing' };
+        window.prompt('GPTOpt 导航诊断（可直接复制）', JSON.stringify(status, null, 2));
+    });
+
     start();
 
     function installController() {
@@ -94,13 +107,30 @@
             },
             rebuild() {
                 scheduleRebuild();
+            },
+            status() {
+                const ctx = getContext();
+                return {
+                    enabled,
+                    mode: ctx.mode,
+                    path: safePath(ctx.win),
+                    railConnected: Boolean(rail?.isConnected),
+                    popupConnected: Boolean(popup?.isConnected),
+                    turnShells: ctx.doc.querySelectorAll(
+                        'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]'
+                    ).length,
+                    messageRoles: ctx.doc.querySelectorAll('[data-message-author-role]').length,
+                    exchanges: exchanges.length
+                };
             }
         };
     }
 
     function installStyles() {
-        if (document.getElementById('gptopt-nav-style')) return;
-        const style = document.createElement('style');
+        const existing = document.getElementById('gptopt-nav-style');
+        if (existing?.isConnected) return;
+
+        const style = existing || document.createElement('style');
         style.id = 'gptopt-nav-style';
         style.textContent = `
 #gptopt-nav-rail {
@@ -238,19 +268,25 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
     function installUi() {
         const init = () => {
             if (!document.body) return;
+
+            installStyles();
+
             if (!rail) {
                 rail = document.createElement('nav');
                 rail.id = 'gptopt-nav-rail';
                 rail.setAttribute('aria-label', 'GPTOpt 会话快捷导航');
                 rail.hidden = true;
+            }
+            if (!rail.isConnected) {
                 document.body.appendChild(rail);
             }
+
             if (!popup) {
                 popup = document.createElement('div');
                 popup.id = 'gptopt-nav-popup';
                 popup.setAttribute('role', 'menu');
                 popup.hidden = true;
-                document.body.appendChild(popup);
+
                 document.addEventListener(
                     'pointerdown',
                     (event) => {
@@ -260,6 +296,9 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
                     },
                     true
                 );
+            }
+            if (!popup.isConnected) {
+                document.body.appendChild(popup);
             }
         };
 
@@ -333,24 +372,28 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
         }
 
         exchanges = scanExchanges(ctx);
-        if (exchanges.length < SETTINGS.minItems) {
-            rail.hidden = true;
-            popup.hidden = true;
-            return;
-        }
 
+        // The rail handle is deliberately visible even when zero turns are found.
+        // That makes selector breakage diagnosable instead of looking like the script never ran.
         rail.hidden = false;
-        bindScrollOwner(ctx);
+
+        if (exchanges.length >= SETTINGS.minItems) {
+            bindScrollOwner(ctx);
+        } else {
+            unbindScrollOwner();
+        }
 
         const signature = exchanges.map((item) => `${item.key}\u0000${item.label}`).join('\u0001');
-        if (signature !== lastSignature) {
+        if (signature !== lastSignature || rail.childElementCount === 0) {
             lastSignature = signature;
             renderRail();
-            renderPopup();
+            renderPopup(ctx);
         }
 
-        updateActive(ctx);
-        prefetchConversationLabels(ctx);
+        if (exchanges.length >= SETTINGS.minItems) {
+            updateActive(ctx);
+            prefetchConversationLabels(ctx);
+        }
     }
 
     function safePath(win) {
@@ -503,9 +546,24 @@ html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
         });
     }
 
-    function renderPopup() {
+    function renderPopup(ctx = getContext()) {
         const wasHidden = popup.hidden;
         popup.replaceChildren();
+
+        if (!exchanges.length) {
+            const row = document.createElement('div');
+            row.className = 'gptopt-nav-row';
+            row.style.cursor = 'default';
+            row.innerHTML =
+                '<span class="gptopt-nav-index">!</span>' +
+                '<span class="gptopt-nav-label">未识别到会话轮次（' +
+                (ctx.mode === 'frame' ? '横置 iframe' : '普通页面') +
+                '）</span>';
+            popup.appendChild(row);
+            popup.hidden = wasHidden;
+            return;
+        }
+
         exchanges.forEach((exchange, index) => {
             const row = document.createElement('button');
             row.type = 'button';
