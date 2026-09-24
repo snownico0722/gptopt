@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         GPTOpt - ChatGPT 手机远程横置 + 会话导航
 // @namespace    https://github.com/snownico0722/gptopt
-// @version      1.1.0
+// @version      1.2.0
 // @description  手机远程控制电脑时，将 ChatGPT 放进真实竖向视口后横置 90°；内置轻量、旋转感知的会话快捷导航。
 // @author       snownico0722
 // @match        https://chatgpt.com/*
 // @match        https://chat.openai.com/*
 // @run-at       document-start
+// @noframes
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_registerMenuCommand
@@ -30,49 +31,43 @@
         }
     })();
 
-    // Ignore unrelated frames. The same userscript intentionally runs inside the
-    // one iframe created by GPTOpt so the navigation plugin can live there.
-    if (!IS_TOP && !IS_REMOTE_FRAME) return;
+    // GPTOpt only executes in the top page. The remote ChatGPT iframe is
+    // same-origin, so the top script can inspect and control it directly.
+    if (!IS_TOP) return;
 
-    if (IS_REMOTE_FRAME) {
-        bootConversationRail();
-        return;
-    }
-
+    bootConversationRail();
     bootRemoteViewport();
 
     /* ====================================================================== *
-     * Conversation navigation (remote iframe only)
+     * Conversation navigation (top overlay; controls top page or remote iframe)
      * ====================================================================== */
 
     function bootConversationRail() {
     const NAV_KEY = 'gptopt-nav-enabled';
     const SETTINGS = {
-        minItems: 2,
-        labelChars: 80,
+        minItems: 1,
+        labelChars: 88,
         readingLine: 0.32,
-        rebuildDelayMs: 120,
-        popupHideDelayMs: 220,
+        rebuildDelayMs: 80,
+        periodicMs: 650,
         apiRetryMs: 30000
     };
 
     let enabled = GM_getValue(NAV_KEY, true);
-
-    const labelCache = new Map();
-    let exchanges = [];
-    let activeIndex = -1;
-
     let rail = null;
     let popup = null;
-    let observer = null;
     let rebuildTimer = null;
+    let periodicTimer = null;
     let activeFrame = 0;
-    let hideTimer = null;
+    let activeIndex = -1;
+    let exchanges = [];
+    let lastSignature = '';
+    let lastContextKey = '';
+    let lastPath = '';
     let scrollOwner = null;
-    let scrollEventTarget = null;
-    let lastPath = location.pathname;
-    let lastRenderSignature = '';
+    let scrollTarget = null;
 
+    const labelCache = new Map();
     const api = {
         token: null,
         tokenAt: -Infinity,
@@ -83,59 +78,53 @@
     };
 
     installStyles();
-    listenForParentSettings();
+    installUi();
+    installController();
     start();
 
-    function listenForParentSettings() {
-        window.addEventListener('message', (event) => {
-            if (event.source !== window.parent || event.origin !== location.origin) return;
-            const data = event.data;
-            if (!data || typeof data !== 'object') return;
-
-            if (data.type === 'gptopt-settings') {
-                if (typeof data.navEnabled === 'boolean') {
-                    enabled = data.navEnabled;
-                    GM_setValue(NAV_KEY, enabled);
-                    scheduleRebuild();
-                }
+    function installController() {
+        window.__GPTOPT_NAV__ = {
+            setEnabled(value) {
+                enabled = Boolean(value);
+                GM_setValue(NAV_KEY, enabled);
+                scheduleRebuild();
+            },
+            getEnabled() {
+                return enabled;
+            },
+            rebuild() {
+                scheduleRebuild();
             }
-        });
+        };
     }
 
     function installStyles() {
         if (document.getElementById('gptopt-nav-style')) return;
-
         const style = document.createElement('style');
         style.id = 'gptopt-nav-style';
         style.textContent = `
 #gptopt-nav-rail {
-    position: fixed;
-    top: 72px;
-    right: 10px;
-    bottom: 112px;
-    width: 46px;
-    z-index: 2147483000;
+    position: fixed !important;
+    top: 92px !important;
+    right: 10px !important;
+    bottom: 118px !important;
+    width: 46px !important;
+    z-index: 2147483647 !important;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 1px;
     padding: 4px 0;
     box-sizing: border-box;
-    pointer-events: auto;
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: none;
-    color: var(--text-primary, #111);
+    color: #5f6368;
+    pointer-events: auto !important;
+    visibility: visible !important;
 }
-
-#gptopt-nav-rail::-webkit-scrollbar {
-    display: none;
-}
-
-#gptopt-nav-rail[hidden],
-#gptopt-nav-popup[hidden] {
-    display: none !important;
-}
+#gptopt-nav-rail::-webkit-scrollbar { display: none; }
+#gptopt-nav-rail[hidden], #gptopt-nav-popup[hidden] { display: none !important; }
 
 .gptopt-nav-menu,
 .gptopt-nav-tick {
@@ -148,24 +137,19 @@
     cursor: pointer;
     touch-action: manipulation;
 }
-
 .gptopt-nav-menu {
-    flex: 0 0 32px;
+    flex: 0 0 36px;
     width: 42px;
-    height: 32px;
+    height: 36px;
     border-radius: 10px;
-    font: 600 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
-    opacity: .72;
+    font: 700 18px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+    opacity: .78;
 }
-
 .gptopt-nav-menu:hover,
-.gptopt-nav-menu:focus-visible {
-    background: color-mix(in srgb, currentColor 8%, transparent);
-    opacity: 1;
-}
+.gptopt-nav-menu:focus-visible { background: rgba(127,127,127,.14); opacity: 1; }
 
 .gptopt-nav-tick {
-    flex: 1 1 12px;
+    flex: 1 1 11px;
     min-height: 9px;
     max-height: 24px;
     width: 42px;
@@ -174,51 +158,45 @@
     justify-content: center;
     border-radius: 8px;
 }
-
 .gptopt-nav-tick > span {
-    width: 19px;
-    height: 2px;
+    width: 18px;
+    height: 3px;
     border-radius: 999px;
     background: currentColor;
-    opacity: .24;
+    opacity: .33;
     transition: width 100ms ease, opacity 100ms ease;
 }
-
-.gptopt-nav-tick:hover > span {
-    width: 25px;
-    opacity: .55;
-}
-
-.gptopt-nav-tick.is-active > span {
-    width: 31px;
-    opacity: .95;
-}
+.gptopt-nav-tick:hover > span { width: 27px; opacity: .7; }
+.gptopt-nav-tick.is-active > span { width: 34px; opacity: 1; }
 
 #gptopt-nav-popup {
-    position: fixed;
-    top: 50%;
-    right: 62px;
-    transform: translateY(-50%);
-    width: min(360px, calc(100vw - 90px));
-    max-height: min(620px, calc(100vh - 80px));
-    z-index: 2147483001;
+    position: fixed !important;
+    top: 50% !important;
+    right: 62px !important;
+    transform: translateY(-50%) !important;
+    width: min(420px, calc(100vw - 90px)) !important;
+    max-height: min(660px, calc(100vh - 80px)) !important;
+    z-index: 2147483647 !important;
     overflow: auto;
     overscroll-behavior: contain;
     padding: 8px;
     box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    border: 1px solid rgba(127,127,127,.22);
     border-radius: 16px;
-    background: color-mix(in srgb, var(--main-surface-primary, #fff) 96%, transparent);
+    background: rgba(250,250,250,.96);
     box-shadow: 0 10px 34px rgba(0,0,0,.18);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    color: var(--text-primary, #111);
+    color: #111;
     scrollbar-width: thin;
+    pointer-events: auto !important;
+    visibility: visible !important;
 }
+html.dark #gptopt-nav-popup { background: rgba(32,32,32,.96); color: #f3f3f3; }
 
 .gptopt-nav-row {
     width: 100%;
-    min-height: 42px;
+    min-height: 44px;
     display: flex;
     align-items: center;
     gap: 9px;
@@ -232,52 +210,57 @@
     touch-action: manipulation;
     font: 500 14px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-
 .gptopt-nav-row:hover,
-.gptopt-nav-row:focus-visible {
-    background: color-mix(in srgb, currentColor 7%, transparent);
-}
-
-.gptopt-nav-row.is-active {
-    background: color-mix(in srgb, currentColor 10%, transparent);
-    font-weight: 650;
-}
-
+.gptopt-nav-row:focus-visible { background: rgba(127,127,127,.12); }
+.gptopt-nav-row.is-active { background: rgba(127,127,127,.16); font-weight: 700; }
 .gptopt-nav-index {
     flex: 0 0 auto;
-    min-width: 24px;
-    opacity: .45;
+    min-width: 26px;
+    opacity: .48;
     font-variant-numeric: tabular-nums;
     text-align: right;
 }
-
 .gptopt-nav-label {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-
 .gptopt-nav-flash {
-    outline: 2px solid color-mix(in srgb, var(--theme-entity-accent, #10a37f) 70%, transparent) !important;
+    outline: 2px solid #10a37f !important;
     outline-offset: 4px !important;
     border-radius: 10px;
-}
-
-@media (prefers-color-scheme: dark) {
-    #gptopt-nav-popup {
-        background: color-mix(in srgb, var(--main-surface-primary, #212121) 95%, transparent);
-    }
 }
 `;
         document.documentElement.appendChild(style);
     }
 
-    function start() {
+    function installUi() {
         const init = () => {
-            ensureUi();
-            bindObserver();
-            scheduleRebuild();
+            if (!document.body) return;
+            if (!rail) {
+                rail = document.createElement('nav');
+                rail.id = 'gptopt-nav-rail';
+                rail.setAttribute('aria-label', 'GPTOpt 会话快捷导航');
+                rail.hidden = true;
+                document.body.appendChild(rail);
+            }
+            if (!popup) {
+                popup = document.createElement('div');
+                popup.id = 'gptopt-nav-popup';
+                popup.setAttribute('role', 'menu');
+                popup.hidden = true;
+                document.body.appendChild(popup);
+                document.addEventListener(
+                    'pointerdown',
+                    (event) => {
+                        if (popup.hidden) return;
+                        if (popup.contains(event.target) || rail?.contains(event.target)) return;
+                        popup.hidden = true;
+                    },
+                    true
+                );
+            }
         };
 
         if (document.readyState === 'loading') {
@@ -287,71 +270,36 @@
         }
     }
 
-    function ensureUi() {
-        if (!document.body) return;
-
-        if (!rail) {
-            rail = document.createElement('nav');
-            rail.id = 'gptopt-nav-rail';
-            rail.setAttribute('aria-label', 'GPTOpt conversation navigation');
-            rail.addEventListener('pointerenter', () => {
-                if (enabled && exchanges.length >= SETTINGS.minItems) showPopup(false);
-            });
-            rail.addEventListener('pointerleave', scheduleHidePopup);
-            document.body.appendChild(rail);
-        }
-
-        if (!popup) {
-            popup = document.createElement('div');
-            popup.id = 'gptopt-nav-popup';
-            popup.setAttribute('role', 'menu');
-            popup.hidden = true;
-            popup.addEventListener('pointerenter', cancelHidePopup);
-            popup.addEventListener('pointerleave', scheduleHidePopup);
-            document.body.appendChild(popup);
-
-            document.addEventListener(
-                'pointerdown',
-                (event) => {
-                    if (popup.hidden || popup.dataset.pinned !== '1') return;
-                    if (popup.contains(event.target) || rail?.contains(event.target)) return;
-                    hidePopup(true);
-                },
-                true
-            );
+    function start() {
+        const begin = () => {
+            installUi();
+            scheduleRebuild();
+            periodicTimer = setInterval(scheduleRebuild, SETTINGS.periodicMs);
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', begin, { once: true });
+        } else {
+            begin();
         }
     }
 
-    function bindObserver() {
-        if (observer || !document.body) return;
+    function getContext() {
+        const frame = document.getElementById(REMOTE_FRAME_ID);
+        const frameMode =
+            document.documentElement.classList.contains('gptopt-frame-ready') &&
+            frame &&
+            frame.isConnected;
 
-        observer = new MutationObserver((mutations) => {
-            for (const mutation of mutations) {
-                const target = mutation.target;
-                if (
-                    target instanceof Node &&
-                    (rail?.contains(target) || popup?.contains(target))
-                ) {
-                    continue;
+        if (frameMode) {
+            try {
+                const doc = frame.contentDocument;
+                const win = frame.contentWindow;
+                if (doc?.documentElement && win?.location?.origin === location.origin) {
+                    return { mode: 'frame', doc, win, key: `frame:${win.location.pathname}` };
                 }
-
-                const externalChange = [...mutation.addedNodes, ...mutation.removedNodes].some(
-                    (node) =>
-                        !(node instanceof Node) ||
-                        (!rail?.contains(node) &&
-                            !popup?.contains(node) &&
-                            node !== rail &&
-                            node !== popup)
-                );
-
-                if (externalChange || mutation.addedNodes.length === 0) {
-                    scheduleRebuild();
-                    return;
-                }
-            }
-        });
-
-        observer.observe(document.body, { childList: true, subtree: true });
+            } catch (_) {}
+        }
+        return { mode: 'top', doc: document, win: window, key: `top:${location.pathname}` };
     }
 
     function scheduleRebuild() {
@@ -360,58 +308,61 @@
     }
 
     function rebuild() {
-        ensureUi();
-        handleRouteChange();
+        installUi();
+        if (!rail || !popup) return;
 
         if (!enabled) {
-            if (rail) rail.hidden = true;
-            hidePopup(true);
+            rail.hidden = true;
+            popup.hidden = true;
             return;
         }
 
-        exchanges = scanExchanges();
+        const ctx = getContext();
+        const path = safePath(ctx.win);
+        if (ctx.key !== lastContextKey || path !== lastPath) {
+            lastContextKey = ctx.key;
+            lastPath = path;
+            activeIndex = -1;
+            lastSignature = '';
+            labelCache.clear();
+            api.conversationId = null;
+            api.groups = null;
+            api.pending = false;
+            api.failedAt = -Infinity;
+            unbindScrollOwner();
+        }
+
+        exchanges = scanExchanges(ctx);
         if (exchanges.length < SETTINGS.minItems) {
-            if (rail) rail.hidden = true;
-            hidePopup(true);
-            lastRenderSignature = '';
+            rail.hidden = true;
+            popup.hidden = true;
             return;
         }
 
-        if (rail) rail.hidden = false;
-        bindScrollOwner();
+        rail.hidden = false;
+        bindScrollOwner(ctx);
 
-        const signature = exchanges
-            .map((exchange) => `${exchange.key}\u0000${exchange.label}`)
-            .join('\u0001');
-
-        if (signature !== lastRenderSignature) {
-            lastRenderSignature = signature;
+        const signature = exchanges.map((item) => `${item.key}\u0000${item.label}`).join('\u0001');
+        if (signature !== lastSignature) {
+            lastSignature = signature;
             renderRail();
             renderPopup();
         }
 
-        updateActive();
-        prefetchConversationLabels();
+        updateActive(ctx);
+        prefetchConversationLabels(ctx);
     }
 
-    function handleRouteChange() {
-        if (location.pathname === lastPath) return;
-        lastPath = location.pathname;
-        labelCache.clear();
-        activeIndex = -1;
-        lastRenderSignature = '';
-        api.conversationId = null;
-        api.groups = null;
-        api.pending = false;
-        api.failedAt = -Infinity;
+    function safePath(win) {
+        try { return win.location.pathname; } catch (_) { return ''; }
     }
 
     function normalizeText(text) {
         return (text || '').replace(/\s+/g, ' ').trim();
     }
 
-    function scanExchanges() {
-        const root = document.querySelector('main') || document;
+    function scanExchanges(ctx) {
+        const root = ctx.doc.querySelector('main') || ctx.doc;
         const shellSelector =
             'section[data-testid^="conversation-turn-"], article[data-testid^="conversation-turn-"]';
         const shells = Array.from(root.querySelectorAll(shellSelector));
@@ -448,9 +399,7 @@
                 const role = message.getAttribute('data-message-author-role');
                 if (role === 'user' || !current) {
                     current = {
-                        key:
-                            'msg-' +
-                            (message.getAttribute('data-message-id') || String(groups.length)),
+                        key: 'msg-' + (message.getAttribute('data-message-id') || String(groups.length)),
                         els: [message],
                         userEl: role === 'user' ? message : null
                     };
@@ -463,23 +412,19 @@
 
         const apiByUid = new Map();
         if (api.groups) {
-            for (const item of api.groups) {
-                if (item.uid) apiByUid.set(item.uid, item);
-            }
+            for (const item of api.groups) if (item.uid) apiByUid.set(item.uid, item);
         }
 
         return groups.map((group, index) => {
-            const userRoleNode = getUserRoleNode(group.userEl);
+            const roleNode = getUserRoleNode(group.userEl);
             const uidNode =
-                userRoleNode?.matches?.('[data-message-id]')
-                    ? userRoleNode
-                    : userRoleNode?.querySelector?.('[data-message-id]');
+                roleNode?.matches?.('[data-message-id]')
+                    ? roleNode
+                    : roleNode?.querySelector?.('[data-message-id]');
             const uid = uidNode?.getAttribute('data-message-id') || null;
 
-            const mountedLabel = readPromptText(userRoleNode);
-            if (mountedLabel) {
-                labelCache.set(group.key, mountedLabel);
-            }
+            const mountedLabel = readPromptText(roleNode);
+            if (mountedLabel) labelCache.set(group.key, mountedLabel);
 
             const apiItem =
                 (uid && apiByUid.get(uid)) ||
@@ -489,11 +434,7 @@
                 labelCache.set(group.key, apiItem.prompt);
             }
 
-            return {
-                ...group,
-                uid,
-                label: labelCache.get(group.key) || `问题 ${index + 1}`
-            };
+            return { ...group, uid, label: labelCache.get(group.key) || `问题 ${index + 1}` };
         });
     }
 
@@ -505,23 +446,16 @@
 
     function readPromptText(roleNode) {
         if (!roleNode) return '';
-
         const candidates = [];
-
         roleNode.querySelectorAll?.('.user-message-bubble-color').forEach((node) => {
             candidates.push(normalizeText(node.innerText));
         });
-
         roleNode.querySelectorAll?.('button .line-clamp-3').forEach((node) => {
             candidates.push(normalizeText(node.innerText));
         });
-
         const legacy = roleNode.querySelector?.('.whitespace-pre-wrap');
         if (legacy) candidates.push(normalizeText(legacy.innerText));
-
-        if (!candidates.some(Boolean)) {
-            candidates.push(normalizeText(roleNode.innerText));
-        }
+        if (!candidates.some(Boolean)) candidates.push(normalizeText(roleNode.innerText));
 
         let best = '';
         for (const candidate of candidates) {
@@ -532,26 +466,25 @@
 
     function shortLabel(text) {
         const clean = normalizeText(text);
-        if (clean.length <= SETTINGS.labelChars) return clean;
-        return clean.slice(0, SETTINGS.labelChars - 1) + '…';
+        return clean.length <= SETTINGS.labelChars ? clean : clean.slice(0, SETTINGS.labelChars - 1) + '…';
     }
 
     function renderRail() {
-        if (!rail) return;
         rail.replaceChildren();
 
-        const menuButton = document.createElement('button');
-        menuButton.type = 'button';
-        menuButton.className = 'gptopt-nav-menu';
-        menuButton.textContent = '≡';
-        menuButton.title = '会话导航';
-        menuButton.setAttribute('aria-label', '打开会话导航');
-        menuButton.addEventListener('click', (event) => {
+        const menu = document.createElement('button');
+        menu.type = 'button';
+        menu.className = 'gptopt-nav-menu';
+        menu.textContent = '≡';
+        menu.title = '会话导航';
+        menu.setAttribute('aria-label', '打开会话导航');
+        menu.addEventListener('click', (event) => {
+            event.preventDefault();
             event.stopPropagation();
-            if (popup?.hidden) showPopup(true);
-            else hidePopup(true);
+            popup.hidden = !popup.hidden;
+            if (!popup.hidden) refreshActiveUi();
         });
-        rail.appendChild(menuButton);
+        rail.appendChild(menu);
 
         exchanges.forEach((exchange, index) => {
             const button = document.createElement('button');
@@ -560,25 +493,19 @@
             button.dataset.index = String(index);
             button.title = shortLabel(exchange.label);
             button.setAttribute('aria-label', `${index + 1}. ${shortLabel(exchange.label)}`);
-
-            const bar = document.createElement('span');
-            button.appendChild(bar);
-
+            button.appendChild(document.createElement('span'));
             button.addEventListener('click', (event) => {
                 event.preventDefault();
                 event.stopPropagation();
                 jumpToExchange(index);
             });
-
             rail.appendChild(button);
         });
     }
 
     function renderPopup() {
-        if (!popup) return;
         const wasHidden = popup.hidden;
         popup.replaceChildren();
-
         exchanges.forEach((exchange, index) => {
             const row = document.createElement('button');
             row.type = 'button';
@@ -598,79 +525,49 @@
             row.append(number, label);
             row.addEventListener('click', () => {
                 jumpToExchange(index);
-                hidePopup(true);
+                popup.hidden = true;
             });
             popup.appendChild(row);
         });
-
         popup.hidden = wasHidden;
     }
 
-    function showPopup(pin) {
-        if (!popup || !enabled || exchanges.length < SETTINGS.minItems) return;
-        cancelHidePopup();
-        popup.hidden = false;
-        popup.dataset.pinned = pin ? '1' : '0';
-        refreshActiveUi();
-    }
-
-    function hidePopup(force) {
-        if (!popup) return;
-        if (!force && popup.dataset.pinned === '1') return;
-        popup.hidden = true;
-        popup.dataset.pinned = '0';
-    }
-
-    function scheduleHidePopup() {
-        cancelHidePopup();
-        hideTimer = setTimeout(() => hidePopup(false), SETTINGS.popupHideDelayMs);
-    }
-
-    function cancelHidePopup() {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-    }
-
-    function findScrollContainer(element) {
+    function findScrollContainer(element, ctx) {
         let node = element?.parentElement;
-        while (node && node !== document.body && node !== document.documentElement) {
-            const style = getComputedStyle(node);
+        while (node && node !== ctx.doc.body && node !== ctx.doc.documentElement) {
+            const style = ctx.win.getComputedStyle(node);
             if (
                 (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
                 node.scrollHeight > node.clientHeight + 4
-            ) {
-                return node;
-            }
+            ) return node;
             node = node.parentElement;
         }
         return null;
     }
 
-    function bindScrollOwner() {
+    function unbindScrollOwner() {
+        if (scrollTarget) scrollTarget.removeEventListener('scroll', onScroll, true);
+        scrollOwner = null;
+        scrollTarget = null;
+    }
+
+    function bindScrollOwner(ctx) {
         const sample = exchanges.find((item) => item.els.some((el) => el.isConnected));
-        const sampleEl = sample?.userEl || sample?.els?.[0] || document.querySelector('main');
-        const owner = findScrollContainer(sampleEl) || document.scrollingElement;
-        if (owner === scrollOwner) return;
+        const sampleEl = sample?.userEl || sample?.els?.[0] || ctx.doc.querySelector('main');
+        const owner = findScrollContainer(sampleEl, ctx) || ctx.doc.scrollingElement;
+        const target =
+            owner === ctx.doc.scrollingElement || owner === ctx.doc.documentElement ? ctx.win : owner;
+        if (owner === scrollOwner && target === scrollTarget) return;
 
-        if (scrollEventTarget) {
-            scrollEventTarget.removeEventListener('scroll', onScroll, true);
-        }
-
+        unbindScrollOwner();
         scrollOwner = owner;
-        scrollEventTarget =
-            owner === document.scrollingElement || owner === document.documentElement
-                ? window
-                : owner;
-
-        scrollEventTarget?.addEventListener('scroll', onScroll, {
-            passive: true,
-            capture: true
-        });
+        scrollTarget = target;
+        scrollTarget?.addEventListener('scroll', onScroll, { passive: true, capture: true });
     }
 
     function onScroll() {
         cancelAnimationFrame(activeFrame);
-        activeFrame = requestAnimationFrame(updateActive);
+        activeFrame = requestAnimationFrame(() => updateActive(getContext()));
     }
 
     function exchangeAnchor(exchange) {
@@ -679,37 +576,35 @@
         return exchange.els.find((el) => el.isConnected) || null;
     }
 
-    function updateActive() {
+    function updateActive(ctx) {
         if (!exchanges.length) return;
-
         let line;
         if (
             scrollOwner &&
-            scrollOwner !== document.scrollingElement &&
-            scrollOwner !== document.documentElement
+            scrollOwner !== ctx.doc.scrollingElement &&
+            scrollOwner !== ctx.doc.documentElement
         ) {
             const rect = scrollOwner.getBoundingClientRect();
             line = rect.top + scrollOwner.clientHeight * SETTINGS.readingLine;
         } else {
-            line = window.innerHeight * SETTINGS.readingLine;
+            line = ctx.win.innerHeight * SETTINGS.readingLine;
         }
 
         let best = 0;
-        let bestBelowDistance = Infinity;
         let foundAbove = false;
+        let nearestBelow = Infinity;
 
         exchanges.forEach((exchange, index) => {
             const anchor = exchangeAnchor(exchange);
             if (!anchor) return;
             const top = anchor.getBoundingClientRect().top;
-
             if (top <= line + 1) {
                 best = index;
                 foundAbove = true;
             } else if (!foundAbove) {
                 const distance = top - line;
-                if (distance < bestBelowDistance) {
-                    bestBelowDistance = distance;
+                if (distance < nearestBelow) {
+                    nearestBelow = distance;
                     best = index;
                 }
             }
@@ -725,88 +620,72 @@
         rail?.querySelectorAll('.gptopt-nav-tick').forEach((button) => {
             button.classList.toggle('is-active', Number(button.dataset.index) === activeIndex);
         });
-
         popup?.querySelectorAll('.gptopt-nav-row').forEach((row) => {
             row.classList.toggle('is-active', Number(row.dataset.index) === activeIndex);
         });
-
         if (popup && !popup.hidden) {
-            const activeRow = popup.querySelector('.gptopt-nav-row.is-active');
-            activeRow?.scrollIntoView?.({ block: 'nearest' });
+            popup.querySelector('.gptopt-nav-row.is-active')?.scrollIntoView?.({ block: 'nearest' });
         }
     }
 
     function jumpToExchange(index) {
-        const exchange = exchanges[index];
-        const target = exchangeAnchor(exchange);
-        if (!target) return;
-
+        if (!exchanges[index]) return;
         activeIndex = index;
         refreshActiveUi();
 
-        const doJump = () => {
-            const owner = findScrollContainer(target) || document.scrollingElement;
+        const jump = () => {
+            const ctx = getContext();
+            const target = exchangeAnchor(exchanges[index]);
+            if (!target) return;
+
+            const owner = findScrollContainer(target, ctx) || ctx.doc.scrollingElement;
             const targetRect = target.getBoundingClientRect();
 
             if (
                 owner &&
-                owner !== document.scrollingElement &&
-                owner !== document.documentElement
+                owner !== ctx.doc.scrollingElement &&
+                owner !== ctx.doc.documentElement
             ) {
                 const ownerRect = owner.getBoundingClientRect();
                 owner.scrollTop += targetRect.top - ownerRect.top - 64;
             } else {
-                window.scrollBy({
-                    top: targetRect.top - 64,
-                    left: 0,
-                    behavior: 'auto'
-                });
+                ctx.win.scrollBy({ top: targetRect.top - 64, left: 0, behavior: 'auto' });
             }
         };
 
-        doJump();
-        setTimeout(doJump, 90);
+        jump();
+        setTimeout(jump, 100);
         setTimeout(() => {
-            doJump();
-            flashTarget(exchange);
-        }, 260);
+            jump();
+            const target = exchangeAnchor(exchanges[index]);
+            if (!target || target.getBoundingClientRect().height <= 0) return;
+            target.classList.add('gptopt-nav-flash');
+            setTimeout(() => target.classList.remove('gptopt-nav-flash'), 900);
+        }, 280);
     }
 
-    function flashTarget(exchange) {
-        const target = exchange?.userEl || exchange?.els?.[0];
-        if (!target?.isConnected || target.getBoundingClientRect().height <= 0) return;
-        target.classList.add('gptopt-nav-flash');
-        setTimeout(() => target.classList.remove('gptopt-nav-flash'), 900);
-    }
-
-    function conversationIdFromPath() {
-        const match = /\/c\/([0-9a-f-]{8,})/i.exec(location.pathname);
+    function conversationIdFromContext(ctx) {
+        const match = /\/c\/([0-9a-f-]{8,})/i.exec(safePath(ctx.win));
         return match ? match[1] : null;
     }
 
-    async function fetchAccessToken() {
-        if (api.token && performance.now() - api.tokenAt < 10 * 60 * 1000) {
-            return api.token;
-        }
-
-        const response = await fetch('/api/auth/session', { credentials: 'include' });
+    async function fetchAccessToken(ctx) {
+        if (api.token && performance.now() - api.tokenAt < 10 * 60 * 1000) return api.token;
+        const response = await ctx.win.fetch('/api/auth/session', { credentials: 'include' });
         if (!response.ok) throw new Error(`session ${response.status}`);
-
         const data = await response.json();
         if (!data?.accessToken) throw new Error('missing access token');
-
         api.token = data.accessToken;
         api.tokenAt = performance.now();
         return api.token;
     }
 
-    async function fetchConversationGroups(id) {
-        const token = await fetchAccessToken();
-        const response = await fetch(`/backend-api/conversation/${id}`, {
+    async function fetchConversationGroups(ctx, id) {
+        const token = await fetchAccessToken(ctx);
+        const response = await ctx.win.fetch(`/backend-api/conversation/${id}`, {
             credentials: 'include',
             headers: { Authorization: `Bearer ${token}` }
         });
-
         if (response.status === 401 || response.status === 403) api.token = null;
         if (!response.ok) throw new Error(`conversation ${response.status}`);
 
@@ -816,50 +695,36 @@
 
         const chain = [];
         let node = data.current_node ? mapping[data.current_node] : null;
-
         for (let hops = 0; node && hops < 10000; hops++) {
             chain.push(node);
             node = node.parent ? mapping[node.parent] : null;
         }
         chain.reverse();
 
-        const messages = [];
+        const groups = [];
+        let current = null;
         for (const item of chain) {
             const message = item.message;
             if (!message?.author) continue;
-
             const role = message.author.role;
             if (role !== 'user' && role !== 'assistant') continue;
             if (message.recipient && message.recipient !== 'all') continue;
             if (message.metadata?.is_visually_hidden_from_conversation) continue;
 
-            messages.push({
-                id: message.id,
-                role,
-                text: messageText(message)
-            });
-        }
-
-        const groups = [];
-        let current = null;
-
-        for (const message of messages) {
-            if (message.role === 'user' || !current) {
+            if (role === 'user' || !current) {
                 current = {
-                    uid: message.role === 'user' ? message.id : null,
-                    prompt: message.role === 'user' ? normalizeText(message.text) : ''
+                    uid: role === 'user' ? message.id : null,
+                    prompt: role === 'user' ? normalizeText(messageText(message)) : ''
                 };
                 groups.push(current);
             }
         }
-
         return groups;
     }
 
     function messageText(message) {
         const content = message?.content;
         if (!content) return '';
-
         if (content.content_type === 'text' || content.content_type === 'multimodal_text') {
             return (content.parts || [])
                 .filter((part) => typeof part === 'string')
@@ -869,16 +734,15 @@
         return '';
     }
 
-    function prefetchConversationLabels() {
-        const id = conversationIdFromPath();
+    function prefetchConversationLabels(ctx) {
+        const id = conversationIdFromContext(ctx);
         if (!id) return;
         if (api.conversationId === id && (api.groups || api.pending)) return;
         if (performance.now() - api.failedAt < SETTINGS.apiRetryMs) return;
 
         api.conversationId = id;
         api.pending = true;
-
-        fetchConversationGroups(id).then(
+        fetchConversationGroups(ctx, id).then(
             (groups) => {
                 if (api.conversationId !== id) return;
                 api.groups = groups;
@@ -948,7 +812,7 @@ html.gptopt-frame-ready body > *:not(#${REMOTE_FRAME_ID}) {
     max-height: none !important;
     transform-origin: 0 0 !important;
     overflow: hidden !important;
-    z-index: 2147483647 !important;
+    z-index: 2147483000 !important;
     background: white !important;
     opacity: 0;
     pointer-events: none;
@@ -984,29 +848,11 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
             frame.style.width = `${H}px`;
             frame.style.height = `${W}px`;
 
-            frame.dataset.gptoptDirection = state.direction;
-
             if (state.direction === 'cw') {
                 frame.style.transform = `matrix(0, 1, -1, 0, ${W}, 0)`;
             } else {
                 frame.style.transform = `matrix(0, -1, 1, 0, 0, ${H})`;
             }
-
-            postFrameSettings();
-        }
-
-        function postFrameSettings() {
-            if (!frame?.contentWindow) return;
-            try {
-                frame.contentWindow.postMessage(
-                    {
-                        type: 'gptopt-settings',
-                        direction: state.direction,
-                        navEnabled: state.navEnabled
-                    },
-                    location.origin
-                );
-            } catch (_) {}
         }
 
         function verifyFrame() {
@@ -1031,7 +877,6 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
             clearTimeout(loadTimer);
             document.documentElement.classList.add('gptopt-frame-ready');
             updateFrameGeometry();
-            postFrameSettings();
             startUrlSync();
             rebuildMenus();
         }
@@ -1059,7 +904,6 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
 
             frame = document.createElement('iframe');
             frame.id = REMOTE_FRAME_ID;
-            frame.dataset.gptoptDirection = state.direction;
             frame.src = window.location.href;
             frame.setAttribute(
                 'allow',
@@ -1184,7 +1028,11 @@ html.gptopt-frame-ready #${REMOTE_FRAME_ID} {
 
             addMenu(
                 state.navEnabled ? '✅ 会话快捷导航：开启' : '⬜ 会话快捷导航：关闭',
-                () => updateState({ navEnabled: !state.navEnabled })
+                () => {
+                    const next = !state.navEnabled;
+                    updateState({ navEnabled: next });
+                    window.__GPTOPT_NAV__?.setEnabled(next);
+                }
             );
 
             addMenu('🔧 重新计算横置尺寸', updateFrameGeometry);
