@@ -2,17 +2,20 @@
 
 给 **手机远程控制电脑** 场景使用的 ChatGPT 油猴脚本。
 
-当前功能：
+## 当前功能
 
 - 把 ChatGPT 放进真正交换宽高后的同源 iframe，再整体旋转 90°。
 - 避免直接旋转 ChatGPT DOM 时出现的 sticky / sidebar / vh / 遮罩 / 错位问题。
 - 支持顺时针 / 逆时针切换。
 - 自动同步 iframe 内当前会话 URL 到外层地址栏。
-- 在横置 iframe 内集成 **Conversation Overview** 会话导航：
-  - 每轮提问快捷跳转；
-  - 回答标题分级导航；
-  - 处理 ChatGPT 虚拟化；
-  - 可替代时有时无的原生右侧会话导航。
+- 内置一套 **轻量会话快捷导航**：
+  - 每个用户提问一条导航刻度；
+  - 点击刻度直接跳到对应轮次；
+  - 点击 `≡` 或鼠标经过导航条，可展开问题列表；
+  - 当前阅读轮次会自动高亮；
+  - 缓存已经看到过的问题标题；
+  - 对长会话做一次只读的同源会话数据补全，尽量避免虚拟化后只显示“问题 N”；
+  - 不依赖 ChatGPT 自带、时有时无的右侧会话导航。
 
 ## 安装
 
@@ -20,23 +23,24 @@
 
 `gptopt.user.js`
 
-或者直接使用 Raw 地址安装：
+Raw 安装地址：
 
 `https://raw.githubusercontent.com/snownico0722/gptopt/main/gptopt.user.js`
 
 保存后刷新 ChatGPT。
 
-通过 Tampermonkey 菜单控制：
+Tampermonkey 菜单：
 
 - 横置遥控模式开 / 关
 - 顺时针 / 逆时针
+- 会话快捷导航开 / 关
 - 重新计算横置尺寸
 
 快捷键：
 
 - `Alt + Shift + R`：开 / 关横置遥控模式
 
-## 实现方式
+## 横置原理
 
 外层浏览器例如是：
 
@@ -50,7 +54,7 @@ GPTOpt 创建一个真正的：
 983 × 2048
 ```
 
-同源 ChatGPT iframe，让 ChatGPT 自己从一开始就按这个 viewport 布局，然后只旋转 iframe：
+同源 ChatGPT iframe，让 ChatGPT 从一开始就按这个 viewport 布局，然后只旋转 iframe：
 
 ```text
 983 × 2048
@@ -58,42 +62,56 @@ GPTOpt 创建一个真正的：
 2048 × 983
 ```
 
-因此不需要再修改 ChatGPT 内部的 `main`、`thread`、侧栏、sticky 输入区或渐隐层。
+因此不需要修改 ChatGPT 内部的 `main`、`thread`、侧栏、sticky 输入区或渐隐层。
 
-## Conversation Overview 集成
+## 会话导航为什么自己重写
 
-导航功能来自：
+早期版本尝试集成 `boabab/conversation-overview`。它提供了几个值得参考的思路：
 
-- 上游：`boabab/conversation-overview`
-- 版本：`1.5.0`
-- 固定提交：`445a0e2d53fcfcf57b6297efc56346b2a773213a`
+- 优先使用 `conversation-turn-N` 的持久 shell，而不是只看当前挂载的消息内容；
+- 自动寻找真正的滚动容器；
+- 对 ChatGPT 的虚拟化做缓存；
+- 可以从当前会话 JSON 补全没有挂载过的问题标题。
 
-GPTOpt **没有把上游 12 万多字节源码直接复制进仓库**。
+GPTOpt 现在只保留这些必要思路，导航重新实现，不再下载、执行或依赖第三方脚本。
 
-原因是截至集成时，上游仓库 GitHub 元数据为 `license: null`，仓库中也没有 LICENSE 文件。为了避免在没有明确许可证的情况下重新分发整份源码，GPTOpt 的做法是：
+另外，GPTOpt 的页面本身被旋转了 90°。普通“右侧 rail”放在 iframe 内的逻辑右边，旋转以后实际上会落到物理屏幕底部。因此 GPTOpt 的导航是 **旋转感知** 的：
 
-1. 只在 GPTOpt 创建的横置 iframe 内启动导航；
-2. 从上游固定 commit 的 Raw 文件读取原版脚本；
-3. 校验脚本名称、版本和 demo seam；
-4. 第一次下载后缓存到 Tampermonkey 存储；
-5. 使用上游已经公开提供的 `window.__COR_DEMO__` seam：
-   - 允许它在 GPTOpt iframe 内运行；
-   - 把 `minViewportWidth` 调整为 760；
-   - 关闭 debug；
-6. 不修改上游主体代码。
+- 顺时针横置：导航放在 iframe 的逻辑顶部；
+- 逆时针横置：导航放在 iframe 的逻辑底部；
+- 整个 iframe 旋转后，它最终落在用户实际看到的屏幕右侧。
 
-这意味着对用户来说仍然是 **只安装一个 GPTOpt 脚本**，同时保留上游代码的来源和版本边界。
+这也是它没有直接照搬普通 ChatGPT 导航插件布局的原因。
 
-如果上游以后补充明确的开源许可证，可以再考虑把固定版本直接 vendoring 进仓库，做成完全离线的单文件版本。
+## 会话标题补全
 
-## 更新策略
+导航优先直接读取当前 DOM 中已经挂载的问题。
 
-横置逻辑由本仓库维护。
+长会话被 ChatGPT 虚拟化后，旧问题正文可能不在 DOM 中。此时 GPTOpt 会进行一次**只读**补全：
 
-Conversation Overview 当前固定在指定 commit，不会因为上游突然更新而自动改变行为。需要升级导航版本时，应先验证 ChatGPT 当前 DOM 和 GPTOpt iframe 兼容性，再更新固定 commit。
+1. 读取当前登录会话的 `/api/auth/session`；
+2. 获取访问令牌；
+3. 请求当前会话的 `/backend-api/conversation/<id>`；
+4. 只提取当前分支上的用户问题标题；
+5. 用于补全导航标签。
+
+如果接口变化或请求失败，导航仍能使用，只是未见过的旧轮次会显示为“问题 N”。
+
+## 设计约束
+
+导航刻意保持轻量：
+
+- 不接管 ChatGPT React DOM；
+- 不搬移 ChatGPT 节点；
+- 不修改输入框、侧栏或消息结构；
+- 不依赖原生右侧导航是否存在；
+- 不做复杂的回答标题二级树；
+- 不为了边缘情况堆大量恢复逻辑。
+
+目标就是：**稳定显示轮次、稳定跳转、适合手机远程点按。**
 
 ## 已知限制
 
-- 第一次启用会话导航时，需要访问一次 `raw.githubusercontent.com` 下载固定版本的上游脚本；之后使用 Tampermonkey 缓存。
-- 如果网络环境阻止 Raw GitHub，第一次导航加载会失败，但横置功能仍可工作。
-- ChatGPT 如果未来通过 `frame-ancestors 'none'` 等策略禁止同源 iframe，本方案需要调整。
+- ChatGPT 如果未来通过 `frame-ancestors 'none'` 等策略禁止同源 iframe，横置方案需要调整。
+- ChatGPT 如果改掉 `conversation-turn-N` 或会话接口，导航仍有 DOM 回退，但可能需要更新选择器。
+- 对从未挂载过的虚拟化内容，程序化跳转可能先落到 shell 附近；如果 ChatGPT 当时没有立即挂载正文，轻微滚一下即可。
